@@ -110,6 +110,16 @@ void consoleMessageHandler(QtMsgType type, const QMessageLogContext &, const QSt
         rotateLogLocked();
 }
 
+// 启动摘要与 --dump-params 必须始终可见：它们本来就用于核对“配置到底生效了没有”，
+// 不能因为现场把 LogLevel 调成 info/warn/error 就一并消失。
+void alwaysMessage(const QString &msg)
+{
+    const int saved = gMinRank;
+    gMinRank = 0;
+    qInfo().noquote() << msg;
+    gMinRank = saved;
+}
+
 void applyLogLevel(const QString &level)
 {
     const QString v = level.trimmed().toLower();
@@ -120,7 +130,7 @@ void applyLogLevel(const QString &level)
     else if (v == QLatin1String("error"))
         gMinRank = 3;
     else if (v == QLatin1String("off"))
-        gMinRank = 9;      // 连 Fatal 也不输出（由启动脚本自己留痕时使用）
+        gMinRank = 4;      // off 仍保留 Fatal：致命错误必须留痕，否则现场无据可查
     else
         gMinRank = 0;      // debug 及未知值 = 全输出
 }
@@ -204,20 +214,28 @@ int main(int argc, char *argv[])
 
     // 日志级别与落盘在配置读出来之后才生效；配置加载本身这几行始终可见
     applyLogLevel(cfg.logLevel);
-    openLog(cfg.logFile, cfg.logMaxMb, cfg.logKeep);
 
-    qInfo() << "配置加载成功:" << iniPath << "terminalId =" << cfg.terminalId
-            << "日志级别 =" << cfg.logLevel
-            << "日志文件 =" << (cfg.logFile.isEmpty() ? QStringLiteral("(仅控制台)")
-                                                      : cfg.logFile);
-    qInfo().noquote() << QStringLiteral("[Cfg] 生效参数 ") << cfg.summaryText();
+    // 只 dump 参数时不落盘：避免按终端逐个核对参数时创建空日志，
+    // 也不与正在运行的实例争同一个日志文件
+    const bool dumpOnly = parser.isSet(dumpOpt);
+    if (!dumpOnly)
+        openLog(cfg.logFile, cfg.logMaxMb, cfg.logKeep);
+
+    // 摘要与 dump 输出始终可见（不受 LogLevel 过滤）：现场就是用它们核对 ini 是否被读到
+    alwaysMessage(QStringLiteral("配置加载成功: %1  terminalId=%2  日志级别=%3  日志文件=%4")
+                      .arg(iniPath)
+                      .arg(cfg.terminalId)
+                      .arg(cfg.logLevel)
+                      .arg(cfg.logFile.isEmpty() ? QStringLiteral("(仅控制台)")
+                                                 : cfg.logFile));
+    alwaysMessage(QStringLiteral("[Cfg] 生效参数 %1").arg(cfg.summaryText()));
 
     // 逐项核对 ini 是否被真正读到：把默认值与生效值一起打出来
-    if (parser.isSet(dumpOpt))
+    if (dumpOnly)
     {
         const QStringList lines = cfg.dumpParams();
         for (int i = 0; i < lines.size(); ++i)
-            qInfo().noquote() << lines.at(i);
+            alwaysMessage(lines.at(i));
         return 0;
     }
 
