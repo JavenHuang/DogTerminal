@@ -94,7 +94,16 @@ void MainController::initLinks()
                    QStringLiteral("cmd.%1").arg(_cfg.terminalId), _cfg.mqRetryMs);
     // 差分定位走独立路由键（默认 la），与指令同队列、按路由键分流
     if (_cfg.rtkEnabled && !_cfg.rtkRoutingKey.isEmpty())
+    {
         _mq->addBindingKey(_cfg.rtkRoutingKey);
+        // 多狗共用同一个 la 主题时，靠 Rtk/DiffId 过滤掉别狗的帧；
+        // DiffId=0 是"不校验"，多狗部署会把别人的差分收进来，位姿会来回跳。
+        if (_cfg.rtkDiffId == 0)
+            qWarning().noquote()
+                << QStringLiteral("[Rtk] DiffId=0（不校验差分流）：只有一台狗时可忽略；"
+                                  "若同一 la 主题下还有别的狗，本终端会收下它们的差分帧，"
+                                  "必须各自填写定位单元 ID");
+    }
 
     // ---- 目标检测（YOLO26）：UDP 收包重组 → MQ 转发 ----
     // 只读通道：不参与位姿、导航与任务，服务端按同一份 UDP 协议解析。
