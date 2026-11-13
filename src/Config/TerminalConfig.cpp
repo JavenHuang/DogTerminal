@@ -84,6 +84,10 @@ bool TerminalConfig::load(const QString &iniPath)
     terminalId = static_cast<quint32>(s.value("Terminal/Id", 0).toUInt());
 
     logFile    = s.value("Terminal/LogFile").toString().trimmed();
+    // 多终端共用同一部署目录时，日志必须按终端号分开写：ini 里写 %id% 占位，
+    // 这里替换成 Terminal/Id，避免多个进程写同一文件、滚动时互相 rename/remove。
+    if (!logFile.isEmpty())
+        logFile.replace(QStringLiteral("%id%"), QString::number(terminalId));
     logMaxMb   = s.value("Terminal/LogMaxMB", 20).toInt();
     logKeep    = s.value("Terminal/LogKeep", 3).toInt();
     logLevel   = s.value("Terminal/LogLevel", QStringLiteral("debug")).toString().trimmed().toLower();
@@ -351,6 +355,11 @@ bool TerminalConfig::validate(QString *errMsg) const
         if (detPort == dogRecvPort)
         {
             if (errMsg) *errMsg = QStringLiteral("Detection/Port 不能与 Dog/RecvPort 相同（%1），两个接收端会抢同一个端口").arg(detPort);
+            return false;
+        }
+        if (detPort == dogSendPort)
+        {
+            if (errMsg) *errMsg = QStringLiteral("Detection/Port 不能与 Dog/SendPort 相同（%1），发给狗的报文会打进本机检测监听口").arg(detPort);
             return false;
         }
         if (detBind != QStringLiteral("0.0.0.0") && !QHostAddress().setAddress(detBind))
