@@ -248,6 +248,36 @@ void RtkPoseTracker::onFrame(const QByteArray &body)
         _rtkBiasSumDeg += dyawDeg;
         ++_rtkBiasCount;
         const double biasAvg = _rtkBiasSumDeg / _rtkBiasCount;
+
+        // α 松动监视：bias 是"差分航向 vs 里程计地图航向"的常值偏差。
+        // 判据用低通值而非累计均值：累计均值会被历史稀释（重新标定后正常了
+        // 也长期停在高位），低通值才反映"现在"这个安装角是否还对得上。
+        // 5Hz 差分帧下 τ≈20 帧（约 4s）。
+        _rtkBiasLpfDeg += (dyawDeg - _rtkBiasLpfDeg) * 0.05;
+
+        if (_cfg.rtkYawBiasWarnDeg > 0.0 && _rtkBiasCount >= 20
+            && std::fabs(_rtkBiasLpfDeg) > _cfg.rtkYawBiasWarnDeg)
+        {
+            if (!_rtkBiasWarned)
+            {
+                _rtkBiasWarned = true;
+                qWarning().noquote() << QStringLiteral(
+                    "[Rtk] 航向常值偏差 当前=%1°（阈值 %2°，累计均值=%3°，已 %4 帧）："
+                    "先查天线安装角 α 是否松动或被撞偏，再重做直线标定/停点标定刷新 α 与零位")
+                    .arg(_rtkBiasLpfDeg, 0, 'f', 1)
+                    .arg(_cfg.rtkYawBiasWarnDeg, 0, 'f', 1)
+                    .arg(biasAvg, 0, 'f', 1)
+                    .arg(_rtkBiasCount);
+            }
+        }
+        else if (_rtkBiasWarned && std::fabs(_rtkBiasLpfDeg) < _cfg.rtkYawBiasWarnDeg * 0.5)
+        {
+            // 迟滞：回落到阈值一半以下才解除，避免在阈值附近来回刷屏
+            _rtkBiasWarned = false;
+            qInfo().noquote() << QStringLiteral("[Rtk] 航向常值偏差已回落至 当前=%1°，α 监视恢复")
+                                     .arg(_rtkBiasLpfDeg, 0, 'f', 1);
+        }
+
         qInfo().noquote() << QStringLiteral(
             "[Rtk] 帧=%1 周期=%2ms 最大间隔=%3ms 航向范围=%4° 均值=%5° | %6 | "
             "补偿后(%7, %8) yaw=%9° | 里程计地图(%10, %11) yaw=%12° 差=%13m/%14° | "

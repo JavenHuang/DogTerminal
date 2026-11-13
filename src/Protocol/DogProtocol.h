@@ -68,12 +68,16 @@ enum AttitudeAction
 // 机动控制执行结果
 enum MoveResult
 {
-    MR_ACCEPTED = 0,   // 已接受
-    MR_REJECTED = 1,   // 拒绝（忙/未就绪/参数非法）
-    MR_MOVING   = 2,   // 执行中
-    MR_ARRIVED  = 3,   // 到达目标点或目标航向
-    MR_TIMEOUT  = 4,   // 执行超时
-    MR_FAILED   = 5    // 失败（失联/被抢占/急停等）
+    MR_ACCEPTED  = 0,  // 已接受
+    MR_REJECTED  = 1,  // 拒绝（忙/未就绪/参数非法）
+    MR_MOVING    = 2,  // 执行中
+    MR_ARRIVED   = 3,  // 到达目标点或目标航向
+    MR_TIMEOUT   = 4,  // 执行超时
+    MR_FAILED    = 5,  // 失败（失联/急停/故障等中止）
+    // 被新任务抢占：旧任务不再继续执行，但狗不停车、直接按新目标走。
+    // 新增该值是为了让服务器不必靠"下一条任务被接受"反推旧任务已经结束。
+    // 旧服务端若只识别 0~5，会把 6 落到 default 分支，不影响其余逻辑。
+    MR_CANCELLED = 6
 };
 
 // 机器狗速度档位（与SDK SpeedLevel 对齐）

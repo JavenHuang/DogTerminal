@@ -94,6 +94,10 @@ private:
     bool   _rtkStaleWarned = false;
     double _rtkBiasSumDeg = 0.0;
     int    _rtkBiasCount = 0;
+    // 常值偏差的低通值：只反映"当前"偏差。累计均值（_rtkBiasSumDeg 那一路）
+    // 会被历史稀释——重新标定后正常了也长期停在高位，所以告警看这一路。
+    double _rtkBiasLpfDeg = 0.0;
+    bool   _rtkBiasWarned = false;   // α 松动告警的迟滞标志（回落一半以上才允许再报）
     int    _navPoseSrc = 0;
     double _rtkYawMinDeg = 1e9;
     double _rtkYawMaxDeg = -1e9;

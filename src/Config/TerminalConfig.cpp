@@ -6,6 +6,9 @@
 
 TerminalConfig::TerminalConfig()
     : terminalId(0)
+    , logMaxMb(20)
+    , logKeep(3)
+    , logLevel(QStringLiteral("debug"))
     , mqPort(5672)
     , mqRetryMs(5000)
     , stateRateHz(10)
@@ -61,6 +64,7 @@ TerminalConfig::TerminalConfig()
     , rtkZeroLineSegM(0.6)
     , rtkZeroLineMinM(2.5)
     , rtkZeroLineSpreadDeg(2.0)
+    , rtkYawBiasWarnDeg(3.0)
     , detEnabled(false)
     , detBind(QStringLiteral("0.0.0.0"))
     , detPort(5006)
@@ -78,6 +82,11 @@ bool TerminalConfig::load(const QString &iniPath)
     QSettings s(iniPath, QSettings::IniFormat);
 
     terminalId = static_cast<quint32>(s.value("Terminal/Id", 0).toUInt());
+
+    logFile    = s.value("Terminal/LogFile").toString().trimmed();
+    logMaxMb   = s.value("Terminal/LogMaxMB", 20).toInt();
+    logKeep    = s.value("Terminal/LogKeep", 3).toInt();
+    logLevel   = s.value("Terminal/LogLevel", QStringLiteral("debug")).toString().trimmed().toLower();
 
     mqHost     = s.value("RabbitMq/Host").toString();
     mqPort     = static_cast<quint16>(s.value("RabbitMq/Port", 5672).toUInt());
@@ -291,6 +300,8 @@ bool TerminalConfig::load(const QString &iniPath)
     rtkZeroLineSegM    = qBound(0.2, s.value("Rtk/ZeroLineSegM", 0.6).toDouble(), 5.0);
     rtkZeroLineMinM    = qBound(1.0, s.value("Rtk/ZeroLineMinM", 2.5).toDouble(), 20.0);
     rtkZeroLineSpreadDeg = qBound(0.2, s.value("Rtk/ZeroLineSpreadDeg", 2.0).toDouble(), 20.0);
+    // α 松动告警阈值：常值偏差持续超过它才报（0=关闭）
+    rtkYawBiasWarnDeg = qBound(0.0, s.value("Rtk/YawBiasWarnDeg", 3.0).toDouble(), 180.0);
 
     // ---- 目标检测（YOLO26 检测结果 UDP → MQ 转发）----
     // 只做"收包、重组、原样转发"，不参与位姿与控制；缺段时保持关闭。
@@ -348,5 +359,126 @@ bool TerminalConfig::validate(QString *errMsg) const
             return false;
         }
     }
+    // 日志级别只允许这几档，写错了直接报出来，避免"以为开了 debug 实际没开"
+    if (logLevel != QStringLiteral("debug") && logLevel != QStringLiteral("info")
+        && logLevel != QStringLiteral("warn") && logLevel != QStringLiteral("error")
+        && logLevel != QStringLiteral("off"))
+    {
+        if (errMsg) *errMsg = QStringLiteral("Terminal/LogLevel 取值应为 debug|info|warn|error|off，当前为 %1").arg(logLevel);
+        return false;
+    }
+    if (logMaxMb < 0 || logKeep < 1)
+    {
+        if (errMsg) *errMsg = QStringLiteral("Terminal/LogMaxMB 应>=0，LogKeep 应>=1");
+        return false;
+    }
     return true;
 }
+
+// ============================================================
+// 生效参数摘要
+//
+// 现场调参最常见的坑是"改了 ini 但没生效"或"两份 ini 记混了"，
+// 因此启动时固定打一条单行摘要，需要逐项核对时再用 --dump-params 打全量。
+// 只读成员，无副作用。
+// ============================================================
+QString TerminalConfig::summaryText() const
+{
+    const QString mapState = mapParams.enabled
+        ? QStringLiteral("on(%1,%2)").arg(mapParams.originX, 0, 'f', 2)
+                                       .arg(mapParams.originY, 0, 'f', 2)
+        : QStringLiteral("off");
+    const QString rtkState = rtkEnabled
+        ? QStringLiteral("on(yaw=%1)").arg(rtkYawFromRtk ? QStringLiteral("rtk")
+                                                          : QStringLiteral("odom"))
+        : QStringLiteral("off");
+    const QString detState = detEnabled
+        ? QStringLiteral("on(%1:%2,%3Hz)").arg(detBind).arg(detPort).arg(detMaxHz)
+        : QStringLiteral("off");
+    const QString navSpeed = (navParams.speedMode == Navigator::SpeedMode_Profile)
+        ? QStringLiteral("profile") : QStringLiteral("cruise");
+
+    return QStringLiteral("id=%1 driver=%2 dog=%3:%4/%5 mq=%6:%7 state=%8Hz hb=%9s link=%10s ctrl=%11ms map=%12 rtk=%13 det=%14 nav=%15 v=%16 arrive=%17 log=%18")
+        .arg(terminalId)
+        .arg(dogDriver)
+        .arg(dogIp).arg(dogSendPort).arg(dogRecvPort)
+        .arg(mqHost).arg(mqPort)
+        .arg(stateRateHz)
+        .arg(heartbeatSec)
+        .arg(serverLinkTimeoutSec)
+        .arg(navCtrlTickMs)
+        .arg(mapState)
+        .arg(rtkState)
+        .arg(detState)
+        .arg(navSpeed)
+        .arg(navParams.maxLinearSpeed, 0, 'f', 2)
+        .arg(navParams.arriveRadiusDefault, 0, 'f', 2)
+        .arg(logLevel);
+}
+
+QStringList TerminalConfig::dumpParams() const
+{
+    QStringList out;
+    out << QStringLiteral("[Terminal] id=%1 logFile=%2 logLevel=%3 logMaxMB=%4 logKeep=%5")
+           .arg(terminalId)
+           .arg(logFile.isEmpty() ? QStringLiteral("(仅控制台)") : logFile)
+           .arg(logLevel)
+           .arg(logMaxMb)
+           .arg(logKeep);
+    out << QStringLiteral("[RabbitMq] host=%1 port=%2 vhost=%3 user=%4 exchange=%5 retryms=%6")
+           .arg(mqHost).arg(mqPort).arg(mqVhost).arg(mqUser).arg(mqExchange).arg(mqRetryMs);
+    out << QStringLiteral("[Report] stateratehz=%1 heartbeatsec=%2 serverlinktimeoutsec=%3 velocitytimeoutms=%4")
+           .arg(stateRateHz).arg(heartbeatSec).arg(serverLinkTimeoutSec).arg(velocityTimeoutMs);
+    out << QStringLiteral("[Dog] driver=%1 ip=%2 sendport=%3 recvport=%4 role=%5 heartbeatrole=%6 heartbeatms=%7 timeoutms=%8 autoacquirecontrol=%9 acquireretrycount=%10 acquireretryms=%11 printstatehz=%12")
+           .arg(dogDriver).arg(dogIp).arg(dogSendPort).arg(dogRecvPort)
+           .arg(dogRole).arg(dogHeartbeatRole)
+           .arg(dogHeartbeatMs).arg(dogTimeoutMs)
+           .arg(autoAcquireControl ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(acquireRetryCount).arg(acquireRetryMs).arg(dogStatePrintHz);
+    out << QStringLiteral("[Map] enabled=%1 originx=%2 originy=%3 autoreference=%4 jumpcompensate=%5 scalemin=%6 scalemax=%7 maxheadingerrdeg=%8 coarseheadingerrdeg=%9 minlinedist=%10")
+           .arg(mapParams.enabled ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(mapParams.originX, 0, 'f', 3).arg(mapParams.originY, 0, 'f', 3)
+           .arg(mapParams.autoReference ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(mapParams.jumpCompensate ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(mapParams.scaleMin, 0, 'f', 3).arg(mapParams.scaleMax, 0, 'f', 3)
+           .arg(mapParams.maxHeadingErrRad * 57.29577951308232, 0, 'f', 2)
+           .arg(mapParams.coarseHeadingErrRad * 57.29577951308232, 0, 'f', 2)
+           .arg(mapParams.minLineDist, 0, 'f', 2);
+    out << QStringLiteral("[Pose] yawstabilize=%1 staticlocksec=%2 yawjumpdeg=%3 maxframegapsec=%4")
+           .arg(yawStabilize ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(staticLockSec, 0, 'f', 2).arg(yawJumpDeg, 0, 'f', 2)
+           .arg(poseMaxGapSec, 0, 'f', 2);
+    out << QStringLiteral("[Nav] speedmode=%1 steering=%2 maxturnrate=%3 maxlinearspeed=%4 arriveradiusdefault=%5 softarrivemul=%6 maxaccel=%7 maxdecel=%8 postol=%9 debuglog=%10 ctrltickms=%11 staleStopms=%12")
+           .arg(navParams.speedMode == Navigator::SpeedMode_Profile
+                    ? QStringLiteral("profile") : QStringLiteral("cruise"))
+           .arg(navParams.steeringMode == Navigator::Steering_PurePursuit
+                    ? QStringLiteral("purepursuit") : QStringLiteral("alignthengo"))
+           .arg(navParams.maxTurnRate, 0, 'f', 2)
+           .arg(navParams.maxLinearSpeed, 0, 'f', 2)
+           .arg(navParams.arriveRadiusDefault, 0, 'f', 2)
+           .arg(navParams.softArriveRadiusMul, 0, 'f', 2)
+           .arg(navParams.maxAccel, 0, 'f', 2)
+           .arg(navParams.maxDecel, 0, 'f', 2)
+           .arg(navParams.headingToleranceRad * 57.29577951308232, 0, 'f', 1)
+           .arg(navParams.debugLog ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(navCtrlTickMs).arg(navCtrlStaleStopMs);
+    out << QStringLiteral("[Rtk] enabled=%1 routingkey=%2 diffid=%3 stale=%4 yawfromrtk=%5 useforpose=%6 autocalib=%7 autozero=%8 zerofromline=%9 holdms=%10 yawbiaswarn=%11")
+           .arg(rtkEnabled ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(rtkRoutingKey).arg(rtkDiffId).arg(rtkStaleMs)
+           .arg(rtkYawFromRtk ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(rtkUseForPose ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(rtkAutoCalib ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(rtkAutoZero ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(rtkZeroFromLine ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(rtkHoldMs)
+           .arg(rtkYawBiasWarnDeg, 0, 'f', 1);
+    out << QStringLiteral("[Detection] enabled=%1 bind=%2 port=%3 routingkey=%4 maxhz=%5 skipempty=%6 verboselog=%7")
+           .arg(detEnabled ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(detBind).arg(detPort)
+           .arg(detRoutingKey.isEmpty() ? QStringLiteral("(detection.<id>)") : detRoutingKey)
+           .arg(detMaxHz)
+           .arg(detSkipEmpty ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(detVerbose ? QStringLiteral("true") : QStringLiteral("false"));
+    return out;
+}
+

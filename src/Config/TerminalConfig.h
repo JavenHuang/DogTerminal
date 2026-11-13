@@ -2,6 +2,7 @@
 #define TERMINAL_CONFIG_H
 
 #include <QString>
+#include <QStringList>
 #include "Control/Navigator.h"
 #include "Convert/MapTransform.h"
 
@@ -14,6 +15,13 @@ struct TerminalConfig
 {
     // ---- 终端标识 ----
     quint32 terminalId;          // 终端ID（唯一，路由键用）
+
+    // ---- 日志（控制台始终输出；LogFile 非空时同时落盘并按大小滚动）----
+    // Level：debug|info|warn|error|off，低于该级别的日志不输出（默认 debug=全输出）
+    QString logFile;             // 落盘路径，相对路径按应用目录解析；空=只输出控制台
+    int     logMaxMb;            // 单个文件上限 MB（0=不滚动，默认 20）
+    int     logKeep;             // 滚动保留份数（默认 3，即 .1/.2/.3）
+    QString logLevel;
 
     // ---- RabbitMQ 北向 ----
     QString mqHost;              // 服务器地址
@@ -121,6 +129,10 @@ struct TerminalConfig
     double rtkZeroLineSegM;      // 单段最小位移 m（默认 0.6）
     double rtkZeroLineMinM;      // 累计直线长度门槛 m（默认 2.5）
     double rtkZeroLineSpreadDeg; // 各段 b 观测允许的最大散布 度（默认 2.0）
+    // ---- 航向一致性监视（α 松动告警）----
+    // 差分航向与里程计地图航向的常值偏差长期贴近 0 才正常；持续超过该阈值
+    // 说明标定用的安装角 α 与实物不符（松动/被撞偏/换过安装位置）。
+    double rtkYawBiasWarnDeg;    // 常值偏差告警阈值 度（默认 3.0，0=关闭告警）
 
     // ---- 目标检测（YOLO26 检测结果 UDP → MQ 转发）----
     // 188 的检测服务把每帧推理结果（完整 JSON 或 base64 分片）发到本机端口，
@@ -140,6 +152,12 @@ struct TerminalConfig
     bool load(const QString &iniPath);
     // 加载后的检查（terminalId>0、dogIp 非空等）
     bool validate(QString *errMsg) const;
+
+    // ---- 生效参数摘要（现场排查用）----
+    // summaryText：单行紧凑摘要，启动时打印一条，便于和服务器/现场记录对照
+    QString summaryText() const;
+    // dumpParams：逐行完整键值（含各段默认值与生效值），供 --dump-params 输出
+    QStringList dumpParams() const;
 };
 
 #endif  // TERMINAL_CONFIG_H

@@ -119,9 +119,8 @@ void CommandRouter::handleMoveCmd(const QByteArray &body)
     // 不 emit stopRequested/finished，不触发停车。
     // 狗 update 下一拍就按新目标算 headingErr → 输出新方向 → 无缝变向继续走。
     // 这样服务器可以在"快到 A 点时"提前下发任务 B，无需等到达判定 + feedback 往返。
-    // 代价：被打断的旧任务不会发 MR_ARRIVED / MR_CANCELLED feedback
-    // （服务器逻辑若需要知道"旧任务被抢占"再单独补一个 MR_CANCELLED 即可）。
-    // isActive() 必须在 start() 之前取，否则永远为 true，首条任务也会打印"抢占"
+    // 旧任务由下面的 MR_CANCELLED 单独结束，不继承 ARRIVED/FAILED 语义。
+    // wasActive/taskId/softArrived 必须在 start() 之前取，否则拿到的是新任务。
     // 地图坐标启用时服务器下发的是地图坐标，需反变换为狗局部坐标
     double targetX = cmd.x;
     double targetY = cmd.y;
@@ -129,7 +128,18 @@ void CommandRouter::handleMoveCmd(const QByteArray &body)
         _map.toLocal(cmd.x, cmd.y, 0.0, &targetX, &targetY, nullptr);
 
     const bool wasActive = _navigator.isActive();
+    const quint32 prevTaskId = _navigator.taskId();
+    const bool prevSoftArrived = _navigator.isSoftArrived();
     _navigator.start(cmd.taskId, targetX, targetY, maxSpeed, arriveRadius, cmd.timeoutMs);
+
+    // 被抢占的旧任务补一条结束事件：狗不停车，所以这条只表示"旧任务不再执行"。
+    // 软到达（已发过 MR_ARRIVED）的旧任务不再补发，避免同一任务两次结束。
+    if (wasActive && prevTaskId != 0 && prevTaskId != cmd.taskId && !prevSoftArrived)
+    {
+        _report.publishFeedback(prevTaskId, DogProtocol::MR_CANCELLED,
+                                QStringLiteral("被 task %1 抢占").arg(cmd.taskId));
+    }
+
     _report.publishFeedback(cmd.taskId, DogProtocol::MR_ACCEPTED,
                     QStringLiteral("%1目标(%2, %3)")
                         .arg(_map.isActive() ? QStringLiteral("地图") : QStringLiteral("局部"))
@@ -183,8 +193,17 @@ void CommandRouter::handleRotateCmd(const QByteArray &body, bool absolute)
 
     _host.exitVelocityMode(true);
     const bool wasActive = _navigator.isActive();
+    const quint32 prevTaskId = _navigator.taskId();
+    const bool prevSoftArrived = _navigator.isSoftArrived();
     _navigator.startRotate(cmd.taskId, _yaw.yaw(), targetAngle, absolute,
                             cmd.maxTurnRate, cmd.toleranceRad, cmd.timeoutMs);
+
+    // 同 handleMoveCmd：被抢占的旧任务补一条 MR_CANCELLED，软到达过的不补发。
+    if (wasActive && prevTaskId != 0 && prevTaskId != cmd.taskId && !prevSoftArrived)
+    {
+        _report.publishFeedback(prevTaskId, DogProtocol::MR_CANCELLED,
+                                QStringLiteral("被 task %1 抢占").arg(cmd.taskId));
+    }
 
     const double angleDeg = targetAngle * kRadToDeg;
     _report.publishFeedback(cmd.taskId, DogProtocol::MR_ACCEPTED,

@@ -153,6 +153,9 @@ public:
     void cancel();  // 取消当前任务（发 MR_FAILED + stopRequested，硬停车）
     bool isActive() const { return _phase != Phase_Idle; }
     bool isRotationActive() const { return _phase == Phase_Rotate; }
+    // 软到达：已发过一次 MR_ARRIVED，仍在前进等下一个任务。
+    // 抢占这种任务时不再补发 MR_CANCELLED，避免同一任务出现两次结束事件。
+    bool isSoftArrived() const { return _phase == Phase_SoftArrived; }
     quint32 taskId() const { return _taskId; }
     double remainingDist() const { return _remainingDist; }
 
