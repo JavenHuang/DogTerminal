@@ -1,0 +1,416 @@
+(base) nvidia@ubuntu:~/SYBH/DogTerminal$ ./Bin/release/dogterminal
+配置加载成功: "/home/nvidia/SYBH/DogTerminal/Bin/release/config/dogterminal.ini" terminalId = 1
+[DogLink] 已启动, 狗地址: "192.168.168.168" 控制口: 8081 状态口: 8080
+[MqLink] 连接RabbitMQ: "192.168.8.155" : 5672 vhost= "/"
+[Main] 终端启动 terminalId = 1
+[Main] 机器狗连接状态: 已连接
+[Main] 开始申请SDK控制权...
+[Main] 终端状态: 2
+[DogState] 链路 狗=已连接 控制权=未取得 电池=未收到
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -57.17) 方向 局部yaw=-57.17°
+[DogState] 位姿 未收到 odom_info
+[MqLink] 已连接，声明交换机: "kdiss.dog"
+[MqLink] 链路就绪，绑定路由键: "cmd.1"
+[Main] 服务器链路就绪
+[Main] 已取得SDK控制权，进入移动模式
+[Main] 终端状态: 3
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41668.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -57.41) 方向 局部yaw=-57.41°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41666.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -57.71) 方向 局部yaw=-57.71°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41668.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -58.03) 方向 局部yaw=-58.03°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41670.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -58.34) 方向 局部yaw=-58.34°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41667.0V
+[DogState] 姿态 rpy[deg]=(roll 0.57 | pitch -0.07 | yaw -58.67) 方向 局部yaw=-58.67°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41665.0V
+[DogState] 姿态 rpy[deg]=(roll 0.55 | pitch -0.07 | yaw -58.93) 方向 局部yaw=-58.93°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[Main] 收到坐标标定 origin( 0 , 0 , 0 ) yaw= 0
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41664.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -59.22) 方向 局部yaw=-59.22° 世界yaw=-59.22°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41664.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -59.56) 方向 局部yaw=-59.56° 世界yaw=-59.56°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41663.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -59.89) 方向 局部yaw=-59.89° 世界yaw=-59.89°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41662.0V
+[DogState] 姿态 rpy[deg]=(roll 0.55 | pitch -0.07 | yaw -60.19) 方向 局部yaw=-60.19° 世界yaw=-60.19°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41661.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -60.50) 方向 局部yaw=-60.50° 世界yaw=-60.50°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41659.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -60.81) 方向 局部yaw=-60.81° 世界yaw=-60.81°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41659.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -61.08) 方向 局部yaw=-61.08° 世界yaw=-61.08°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41656.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -61.42) 方向 局部yaw=-61.42° 世界yaw=-61.42°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41657.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -61.69) 方向 局部yaw=-61.69° 世界yaw=-61.69°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41654.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -62.02) 方向 局部yaw=-62.02° 世界yaw=-62.02°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41656.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -62.28) 方向 局部yaw=-62.28° 世界yaw=-62.28°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41656.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.08 | yaw -62.52) 方向 局部yaw=-62.52° 世界yaw=-62.52°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41656.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -62.90) 方向 局部yaw=-62.90° 世界yaw=-62.90°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41655.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -63.21) 方向 局部yaw=-63.21° 世界yaw=-63.21°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41655.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -63.44) 方向 局部yaw=-63.44° 世界yaw=-63.44°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41652.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -63.44) 方向 局部yaw=-63.44° 世界yaw=-63.44°
+[DogState] 位姿 局部(x -0.12, y -0.24, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41651.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -64.14) 方向 局部yaw=-64.14° 世界yaw=-64.14°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41651.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -64.44) 方向 局部yaw=-64.44° 世界yaw=-64.44°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41652.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -64.74) 方向 局部yaw=-64.74° 世界yaw=-64.74°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41652.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -65.04) 方向 局部yaw=-65.04° 世界yaw=-65.04°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41647.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -65.28) 方向 局部yaw=-65.28° 世界yaw=-65.28°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41648.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -65.53) 方向 局部yaw=-65.53° 世界yaw=-65.53°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41647.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -65.94) 方向 局部yaw=-65.94° 世界yaw=-65.94°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41648.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -66.06) 方向 局部yaw=-66.06° 世界yaw=-66.06°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41648.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -66.53) 方向 局部yaw=-66.53° 世界yaw=-66.53°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41646.0V
+[DogState] 姿态 rpy[deg]=(roll 0.57 | pitch -0.06 | yaw -66.82) 方向 局部yaw=-66.82° 世界yaw=-66.82°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41643.0V
+[DogState] 姿态 rpy[deg]=(roll 0.55 | pitch -0.07 | yaw -67.21) 方向 局部yaw=-67.21° 世界yaw=-67.21°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41644.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -67.49) 方向 局部yaw=-67.49° 世界yaw=-67.49°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41642.0V
+[DogState] 姿态 rpy[deg]=(roll 0.57 | pitch -0.06 | yaw -67.77) 方向 局部yaw=-67.77° 世界yaw=-67.77°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41639.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -68.10) 方向 局部yaw=-68.10° 世界yaw=-68.10°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41641.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -68.44) 方向 局部yaw=-68.44° 世界yaw=-68.44°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41642.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -68.75) 方向 局部yaw=-68.75° 世界yaw=-68.75°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41640.0V
+[DogState] 姿态 rpy[deg]=(roll 0.55 | pitch -0.06 | yaw -68.96) 方向 局部yaw=-68.96° 世界yaw=-68.96°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41636.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -69.07) 方向 局部yaw=-69.07° 世界yaw=-69.07°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41639.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -69.63) 方向 局部yaw=-69.63° 世界yaw=-69.63°
+[DogState] 位姿 局部(x -0.12, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41637.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -69.96) 方向 局部yaw=-69.96° 世界yaw=-69.96°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41637.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -70.25) 方向 局部yaw=-70.25° 世界yaw=-70.25°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41634.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -70.54) 方向 局部yaw=-70.54° 世界yaw=-70.54°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41635.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -70.84) 方向 局部yaw=-70.84° 世界yaw=-70.84°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41634.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.08 | yaw -71.13) 方向 局部yaw=-71.13° 世界yaw=-71.13°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41634.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -71.42) 方向 局部yaw=-71.42° 世界yaw=-71.42°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41631.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -71.72) 方向 局部yaw=-71.72° 世界yaw=-71.72°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41633.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -72.01) 方向 局部yaw=-72.01° 世界yaw=-72.01°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41633.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -72.33) 方向 局部yaw=-72.33° 世界yaw=-72.33°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41631.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -72.62) 方向 局部yaw=-72.62° 世界yaw=-72.62°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41633.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -72.93) 方向 局部yaw=-72.93° 世界yaw=-72.93°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41630.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.06 | yaw -73.23) 方向 局部yaw=-73.23° 世界yaw=-73.23°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41627.0V
+[DogState] 姿态 rpy[deg]=(roll 0.56 | pitch -0.07 | yaw -73.51) 方向 局部yaw=-73.51° 世界yaw=-73.51°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[Main] 收到坐标标定 origin( 0 , 0 , 0 ) yaw= 0
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41631.0V
+[DogState] 姿态 rpy[deg]=(roll 0.61 | pitch -0.23 | yaw -73.68) 方向 局部yaw=-73.68° 世界yaw=-73.68°
+[DogState] 位姿 局部(x -0.11, y -0.23, z 0.10) 机体系速度(vx 0.01, vy 0.00, vz 0.01) yawRate 0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41628.0V
+[DogState] 姿态 rpy[deg]=(roll -0.05 | pitch 6.67 | yaw -79.07) 方向 局部yaw=-79.07° 世界yaw=-79.07°
+[DogState] 位姿 局部(x -0.07, y -0.40, z 0.07) 机体系速度(vx -0.06, vy -0.03, vz 0.07) yawRate -0.25 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41627.0V
+[DogState] 姿态 rpy[deg]=(roll 0.35 | pitch 0.18 | yaw -76.82) 方向 局部yaw=-76.82° 世界yaw=-76.82°
+[DogState] 位姿 局部(x -0.10, y -0.27, z 0.16) 机体系速度(vx -0.04, vy -0.01, vz 0.01) yawRate 0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41355.0V
+[DogState] 姿态 rpy[deg]=(roll 0.41 | pitch -4.49 | yaw -77.06) 方向 局部yaw=-77.06° 世界yaw=-77.06°
+[DogState] 位姿 局部(x -0.10, y -0.26, z 0.19) 机体系速度(vx 0.04, vy 0.00, vz 0.17) yawRate 0.02 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41355.0V
+[DogState] 姿态 rpy[deg]=(roll 0.41 | pitch -2.40 | yaw -77.17) 方向 局部yaw=-77.17° 世界yaw=-77.17°
+[DogState] 位姿 局部(x -0.10, y -0.25, z 0.31) 机体系速度(vx -0.01, vy 0.00, vz 0.10) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41363.0V
+[DogState] 姿态 rpy[deg]=(roll 0.32 | pitch -0.60 | yaw -77.56) 方向 局部yaw=-77.56° 世界yaw=-77.56°
+[DogState] 位姿 局部(x -0.10, y -0.26, z 0.33) 机体系速度(vx 0.04, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41278.0V
+[DogState] 姿态 rpy[deg]=(roll 0.18 | pitch 0.43 | yaw -77.74) 方向 局部yaw=-77.74° 世界yaw=-77.74°
+[DogState] 位姿 局部(x -0.10, y -0.26, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41436.0V
+[DogState] 姿态 rpy[deg]=(roll 0.21 | pitch 0.39 | yaw -78.01) 方向 局部yaw=-78.01° 世界yaw=-78.01°
+[DogState] 位姿 局部(x -0.10, y -0.26, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41462.0V
+[DogState] 姿态 rpy[deg]=(roll 0.22 | pitch 0.37 | yaw -78.26) 方向 局部yaw=-78.26° 世界yaw=-78.26°
+[DogState] 位姿 局部(x -0.10, y -0.26, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41469.0V
+[DogState] 姿态 rpy[deg]=(roll 0.31 | pitch 0.31 | yaw -78.72) 方向 局部yaw=-78.72° 世界yaw=-78.72°
+[DogState] 位姿 局部(x -0.10, y -0.26, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41477.0V
+[DogState] 姿态 rpy[deg]=(roll 1.05 | pitch -1.80 | yaw -79.34) 方向 局部yaw=-79.34° 世界yaw=-79.34°
+[DogState] 位姿 局部(x -0.10, y -0.26, z 0.32) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.03 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41487.0V
+[DogState] 姿态 rpy[deg]=(roll 1.39 | pitch -1.50 | yaw -80.25) 方向 局部yaw=-80.25° 世界yaw=-80.25°
+[DogState] 位姿 局部(x -0.10, y -0.26, z 0.32) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41465.0V
+[DogState] 姿态 rpy[deg]=(roll 1.16 | pitch -0.11 | yaw -81.69) 方向 局部yaw=-81.69° 世界yaw=-81.69°
+[DogState] 位姿 局部(x -0.10, y -0.26, z 0.33) 机体系速度(vx 0.02, vy -0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41446.0V
+[DogState] 姿态 rpy[deg]=(roll 0.49 | pitch 0.38 | yaw -82.08) 方向 局部yaw=-82.08° 世界yaw=-82.08°
+[DogState] 位姿 局部(x -0.10, y -0.27, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41458.0V
+[DogState] 姿态 rpy[deg]=(roll 0.52 | pitch 0.28 | yaw -82.45) 方向 局部yaw=-82.45° 世界yaw=-82.45°
+[DogState] 位姿 局部(x -0.10, y -0.27, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41456.0V
+[DogState] 姿态 rpy[deg]=(roll -0.05 | pitch 0.18 | yaw -82.68) 方向 局部yaw=-82.68° 世界yaw=-82.68°
+[DogState] 位姿 局部(x -0.10, y -0.27, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.02 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41456.0V
+[DogState] 姿态 rpy[deg]=(roll -1.30 | pitch 1.09 | yaw -84.05) 方向 局部yaw=-84.05° 世界yaw=-84.05°
+[DogState] 位姿 局部(x -0.10, y -0.28, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41461.0V
+[DogState] 姿态 rpy[deg]=(roll -1.28 | pitch 1.08 | yaw -84.35) 方向 局部yaw=-84.35° 世界yaw=-84.35°
+[DogState] 位姿 局部(x -0.10, y -0.28, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41466.0V
+[DogState] 姿态 rpy[deg]=(roll -1.28 | pitch 1.10 | yaw -84.59) 方向 局部yaw=-84.59° 世界yaw=-84.59°
+[DogState] 位姿 局部(x -0.10, y -0.28, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41466.0V
+[DogState] 姿态 rpy[deg]=(roll -1.24 | pitch 1.37 | yaw -84.68) 方向 局部yaw=-84.68° 世界yaw=-84.68°
+[DogState] 位姿 局部(x -0.10, y -0.28, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41463.0V
+[DogState] 姿态 rpy[deg]=(roll -0.98 | pitch 1.55 | yaw -84.83) 方向 局部yaw=-84.83° 世界yaw=-84.83°
+[DogState] 位姿 局部(x -0.10, y -0.28, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41459.0V
+[DogState] 姿态 rpy[deg]=(roll -0.92 | pitch 1.57 | yaw -85.10) 方向 局部yaw=-85.10° 世界yaw=-85.10°
+[DogState] 位姿 局部(x -0.10, y -0.28, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41467.0V
+[DogState] 姿态 rpy[deg]=(roll 0.11 | pitch 1.54 | yaw -85.30) 方向 局部yaw=-85.30° 世界yaw=-85.30°
+[DogState] 位姿 局部(x -0.10, y -0.28, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate 0.02 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41462.0V
+[DogState] 姿态 rpy[deg]=(roll 0.95 | pitch 1.99 | yaw -85.27) 方向 局部yaw=-85.27° 世界yaw=-85.27°
+[DogState] 位姿 局部(x -0.10, y -0.29, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=17%/41450.0V
+[DogState] 姿态 rpy[deg]=(roll 0.58 | pitch 1.98 | yaw -85.76) 方向 局部yaw=-85.76° 世界yaw=-85.76°
+[DogState] 位姿 局部(x -0.10, y -0.29, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41471.0V
+[DogState] 姿态 rpy[deg]=(roll 0.20 | pitch 1.84 | yaw -86.15) 方向 局部yaw=-86.15° 世界yaw=-86.15°
+[DogState] 位姿 局部(x -0.10, y -0.29, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41488.0V
+[DogState] 姿态 rpy[deg]=(roll 0.08 | pitch 1.79 | yaw -86.51) 方向 局部yaw=-86.51° 世界yaw=-86.51°
+[DogState] 位姿 局部(x -0.10, y -0.29, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41497.0V
+[DogState] 姿态 rpy[deg]=(roll -0.90 | pitch -0.41 | yaw -86.70) 方向 局部yaw=-86.70° 世界yaw=-86.70°
+[DogState] 位姿 局部(x -0.11, y -0.28, z 0.33) 机体系速度(vx -0.01, vy -0.00, vz -0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41499.0V
+[DogState] 姿态 rpy[deg]=(roll -0.50 | pitch 0.13 | yaw -87.03) 方向 局部yaw=-87.03° 世界yaw=-87.03°
+[DogState] 位姿 局部(x -0.11, y -0.28, z 0.33) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[Main] 收到坐标标定 origin( 0 , 0 , 0 ) yaw= 0
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41482.0V
+[DogState] 姿态 rpy[deg]=(roll 1.23 | pitch 0.10 | yaw -87.45) 方向 局部yaw=-87.45° 世界yaw=-87.45°
+[DogState] 位姿 局部(x -0.11, y -0.28, z 0.32) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate 0.03 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41482.0V
+[DogState] 姿态 rpy[deg]=(roll 1.23 | pitch 0.10 | yaw -87.45) 方向 局部yaw=-87.45° 世界yaw=-87.45°
+[DogState] 位姿 局部(x -0.11, y -0.28, z 0.32) 机体系速度(vx 0.00, vy 0.00, vz 0.00) yawRate 0.03 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41480.0V
+[DogState] 姿态 rpy[deg]=(roll 0.95 | pitch 0.92 | yaw -85.42) 方向 局部yaw=-85.42° 世界yaw=-85.42°
+[DogState] 位姿 局部(x -0.12, y -0.27, z 0.20) 机体系速度(vx -0.02, vy 0.00, vz -0.02) yawRate 0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41481.0V
+[DogState] 姿态 rpy[deg]=(roll 0.28 | pitch 1.66 | yaw -85.64) 方向 局部yaw=-85.64° 世界yaw=-85.64°
+[DogState] 位姿 局部(x -0.12, y -0.27, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41426.0V
+[DogState] 姿态 rpy[deg]=(roll 0.31 | pitch 1.61 | yaw -85.93) 方向 局部yaw=-85.93° 世界yaw=-85.93°
+[DogState] 位姿 局部(x -0.12, y -0.27, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41411.0V
+[DogState] 姿态 rpy[deg]=(roll 0.31 | pitch 1.60 | yaw -86.24) 方向 局部yaw=-86.24° 世界yaw=-86.24°
+[DogState] 位姿 局部(x -0.12, y -0.27, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41406.0V
+[DogState] 姿态 rpy[deg]=(roll 0.31 | pitch 1.60 | yaw -86.51) 方向 局部yaw=-86.51° 世界yaw=-86.51°
+[DogState] 位姿 局部(x -0.12, y -0.27, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41393.0V
+[DogState] 姿态 rpy[deg]=(roll 0.36 | pitch 1.61 | yaw -86.85) 方向 局部yaw=-86.85° 世界yaw=-86.85°
+[DogState] 位姿 局部(x -0.12, y -0.27, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41381.0V
+[DogState] 姿态 rpy[deg]=(roll 0.37 | pitch 1.62 | yaw -87.15) 方向 局部yaw=-87.15° 世界yaw=-87.15°
+[DogState] 位姿 局部(x -0.12, y -0.27, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41377.0V
+[DogState] 姿态 rpy[deg]=(roll 0.67 | pitch 1.38 | yaw -87.45) 方向 局部yaw=-87.45° 世界yaw=-87.45°
+[DogState] 位姿 局部(x -0.12, y -0.26, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41377.0V
+[DogState] 姿态 rpy[deg]=(roll 0.66 | pitch 1.40 | yaw -87.63) 方向 局部yaw=-87.63° 世界yaw=-87.63°
+[DogState] 位姿 局部(x -0.12, y -0.26, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41383.0V
+[DogState] 姿态 rpy[deg]=(roll 0.63 | pitch 1.41 | yaw -87.98) 方向 局部yaw=-87.98° 世界yaw=-87.98°
+[DogState] 位姿 局部(x -0.12, y -0.26, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41375.0V
+[DogState] 姿态 rpy[deg]=(roll 0.61 | pitch 1.41 | yaw -88.33) 方向 局部yaw=-88.33° 世界yaw=-88.33°
+[DogState] 位姿 局部(x -0.12, y -0.26, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41364.0V
+[DogState] 姿态 rpy[deg]=(roll 0.59 | pitch 1.39 | yaw -88.62) 方向 局部yaw=-88.62° 世界yaw=-88.62°
+[DogState] 位姿 局部(x -0.11, y -0.26, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41351.0V
+[DogState] 姿态 rpy[deg]=(roll 0.66 | pitch 1.22 | yaw -88.85) 方向 局部yaw=-88.85° 世界yaw=-88.85°
+[DogState] 位姿 局部(x -0.11, y -0.26, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.01) yawRate 0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41281.0V
+[DogState] 姿态 rpy[deg]=(roll 0.19 | pitch 1.07 | yaw -89.14) 方向 局部yaw=-89.14° 世界yaw=-89.14°
+[DogState] 位姿 局部(x -0.11, y -0.26, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.00 rad/s
+[DogState] 链路 狗=已连接 控制权=已取得 电池=16%/41300.0V
+[DogState] 姿态 rpy[deg]=(roll 0.20 | pitch 1.06 | yaw -89.38) 方向 局部yaw=-89.38° 世界yaw=-89.38°
+[DogState] 位姿 局部(x -0.11, y -0.26, z 0.20) 机体系速度(vx -0.00, vy 0.00, vz 0.00) yawRate -0.01 rad/s
+
+
+
+
+
+
+
+
+
+
+[MqLink] 已连接，声明交换机: "kdiss.dog"
+[MqLink] 链路就绪，绑定路由键: "#"
+[Sim] MQ链路就绪，下发标定并启动心跳
+[Sim] 下发标定 → 终端 1 origin( 0 , 0 , 0 ) yaw = 0
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.03 bat=17%
+attitude 1 1
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.03 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.04 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.05 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.05 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.06 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.06 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.07 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.07 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.08 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.08 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.09 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.09 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.10 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.10 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.11 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.24) yaw=-1.11 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.12 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.13 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.13 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.14 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.14 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.14 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.15 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.16 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.16 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.17 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.17 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.18 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.18 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.19 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.19 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.20 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.21 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.12,-0.23) yaw=-1.21 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.22 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.22 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.23 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.23 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.24 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.24 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.25 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.25 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.26 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.26 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.27 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.27 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.28 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.23) yaw=-1.28 bat=17%
+[Sim] 下发姿态 → 终端 1 action= 1
+[Sim] 下发标定 → 终端 1 origin( 0 , 0 , 0 ) yaw = 0
+attitude 1 2
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.09,-0.30) yaw=-1.30 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.26) yaw=-1.33 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.27) yaw=-1.34 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.26) yaw=-1.35 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.25) yaw=-1.35 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.26) yaw=-1.36 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.26) yaw=-1.36 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.26) yaw=-1.37 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.26) yaw=-1.37 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.26) yaw=-1.38 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.26) yaw=-1.40 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.26) yaw=-1.42 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.27) yaw=-1.43 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.27) yaw=-1.44 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.27) yaw=-1.44 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.28) yaw=-1.46 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.28) yaw=-1.47 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.28) yaw=-1.48 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.28) yaw=-1.48 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.28) yaw=-1.48 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.28) yaw=-1.48 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.28) yaw=-1.49 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.29) yaw=-1.49 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.29) yaw=-1.49 bat=17%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.29) yaw=-1.50 bat=16%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.29) yaw=-1.51 bat=16%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.10,-0.29) yaw=-1.51 bat=16%
+[Sim][终端1] status=3 dog=1 ctrl=1 pos(-0.11,-0.28) yaw=-1.52 bat=16%
+[Sim] 下发姿态 → 终端 1 action= 2
+[Sim] 下发标定 → 终端 1 origin( 0 , 0 , 0 ) yaw = 0
