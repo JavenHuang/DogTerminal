@@ -136,6 +136,8 @@ SOURCES += \
     src/Config/TerminalConfig.cpp \
     src/Protocol/DogProtocol.cpp \
     src/Convert/MapTransform.cpp \
+    src/Convert/DrPose.cpp \
+    src/Convert/RtkAnchor.cpp \
     src/Convert/RtkFusion.cpp \
     src/ServerLink/MqLink.cpp \
     src/ServerLink/DetectionLink.cpp \
@@ -159,6 +161,8 @@ HEADERS += \
     src/Protocol/DogProtocol.h \
     src/Common/DogText.h \
     src/Convert/MapTransform.h \
+    src/Convert/DrPose.h \
+    src/Convert/RtkAnchor.h \
     src/Convert/RtkFusion.h \
     src/Convert/RtkPoseTracker.h \
     src/Convert/RtkFrameReader.h \

@@ -15,6 +15,7 @@
 #include "Common/DogText.h"
 #include "Config/TerminalConfig.h"
 #include "Control/AttitudeExecutor.h"
+#include "Control/MotionState.h"
 #include "Control/Navigator.h"
 #include "Control/YawStabilizer.h"
 #include "Convert/MapTransform.h"
@@ -26,10 +27,11 @@ CommandRouter::CommandRouter(const TerminalConfig &cfg, Navigator &navigator,
                              AttitudeExecutor &attitude, MapTransform &map, YawStabilizer &yaw,
                              DogClientBase *&dog, bool &controlAcquired, bool &velCtrlActive,
                              ReportService &report, double &velFwd, double &velTurn,
-                             double &velShift, CommandHost &host)
+                             double &velShift, CommandHost &host, MotionState &state)
     : _cfg(cfg), _navigator(navigator), _attitude(attitude), _map(map), _yaw(yaw),
       _dog(dog), _controlAcquired(controlAcquired), _velCtrlActive(velCtrlActive),
-      _report(report), _velFwd(velFwd), _velTurn(velTurn), _velShift(velShift), _host(host)
+      _report(report), _velFwd(velFwd), _velTurn(velTurn), _velShift(velShift), _host(host),
+      _st(state)
 {
 }
 
@@ -268,7 +270,11 @@ void CommandRouter::handleMapCalibCmd(const QByteArray &body)
                             QStringLiteral("任务执行中，无法重建地图参考"));
             return;
         }
-        _host.resetMapReference(odom.position[0], odom.position[1], _yaw.yaw());
+        // 参考点用姿态快照（死推算后的局部位置），不是原始 odom：
+        // 原始 position 会在行走中整体跳 0.6~3m，用它当参考点会让地图 0 点飘
+        const double resetX = _st.valid ? _st.x : static_cast<double>(odom.position[0]);
+        const double resetY = _st.valid ? _st.y : static_cast<double>(odom.position[1]);
+        _host.resetMapReference(resetX, resetY, _yaw.yaw());
         qInfo().noquote() << "[Map] 参考已重建（当前点=O点 朝向=0°正东）:" << _map.describe();
         // 从这里开始进入"走一段、标一次"的行程监控，直到 mapline/MAPCHECK 收尾
         _host.beginLineTrace();
@@ -315,7 +321,8 @@ void CommandRouter::handleMapCalibCmd(const QByteArray &body)
         const bool ok = haveTrace
             ? _map.calibrateLineVD(tvx, tvy, cmd.targetX, cmd.targetY,
                                    !checkOnly, &grade, &msg)
-            : _map.calibrateLineEx(odom.position[0], odom.position[1],
+            : _map.calibrateLineEx(_st.valid ? _st.x : static_cast<double>(odom.position[0]),
+                                   _st.valid ? _st.y : static_cast<double>(odom.position[1]),
                                    cmd.targetX, cmd.targetY,
                                    !checkOnly, &grade, &msg);
         if (haveTrace)

@@ -10,6 +10,7 @@
 #include "Control/Navigator.h"
 #include "Control/AttitudeExecutor.h"
 #include "Convert/MapTransform.h"
+#include "Convert/DrPose.h"
 #include "Convert/RtkFusion.h"
 #include "Convert/RtkPoseTracker.h"
 #include "Control/MotionState.h"
@@ -119,6 +120,24 @@ private:
     MotionState _st;         // 姿态快照：差分、导航、上报三方共用的唯一来源
     MapTransform _map;     // 局部坐标 ↔ 本地地图坐标
     RtkFusion _fusion;     // 差分锚点 + 里程计增量 的位姿融合与在线标定
+    // 抗跳变局部位置：只积分"合理步长"，跳变帧整帧丢弃。
+    // 狗端 odom 会整体重置（run9 实测 8 次 0.63~3.12m 单帧跳变），
+    // 原始位置直接进导航会让 Pure Pursuit 的方位角瞬变几十度 → 原地画圈。
+    DrPose _dr;
+
+    // ---- 差分静置锚定的相对基准 ----
+    // 不用差分绝对坐标，而是记"上一次锚点：差分位置 + 当时地图位姿"，
+    // 用两点的位移差去修正地图位姿。这样服务器/差分的坐标系原点、
+    // 终端 mapreset 的原点各管各的，不需要知道谁对应谁。
+    bool   _rkBaseValid = false;
+    double _rkBaseRtkX = 0.0;
+    double _rkBaseRtkY = 0.0;
+    double _rkBaseMapX = 0.0;
+    double _rkBaseMapY = 0.0;
+    double _rkRotRad = 0.0;     // 差分系 → 地图系 的转角估计（首段前为 0）
+    int    _rkRotSamples = 0;   // 已用于估计转角的段数
+    // 消费一个静置锚点：更新基准、按需修正 _dr 位姿
+    void applyRtkAnchor(double ax, double ay, double mapX, double mapY, int frames, double spread);
 
     QTimer *_stateTimer;      // 状态上报
     QTimer *_hbTimer;         // 终端心跳

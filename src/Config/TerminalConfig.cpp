@@ -182,6 +182,19 @@ bool TerminalConfig::load(const QString &iniPath)
     poseDispReanchorDeg = s.value("Pose/DispHdgReanchorDeg", 45.0).toDouble();
     // 原始模式：位置/朝向全部直通狗体上报值，关闭一切"识别 + 补偿"
     poseRawOdom = s.value("Pose/RawOdom", false).toBool();
+    // ---- 位置源：dr = 抗跳变死推算（推荐） / odom = 原始 position 直通 ----
+    // 狗端 odom 会整体重置（run9 实测 8 次 0.63~3.12m 单帧跳变，包间隔仅 8~11ms），
+    // 跳变进导航会让 Pure Pursuit 的方位角瞬间变几十度 → 原地画圈。
+    {
+        const QString src = s.value("Pose/PosSource", QStringLiteral("dr"))
+                                .toString().trimmed().toLower();
+        posePosSourceDr = (src != QStringLiteral("odom"));
+        poseDrJumpK    = qBound(1.0, s.value("Pose/DrJumpK", 3.0).toDouble(), 20.0);
+        poseDrJumpMinM = qBound(0.02, s.value("Pose/DrJumpMinM", 0.10).toDouble(), 2.0);
+        // 原始模式必须同时直通位置，否则"原始"只对朝向生效、位置还走死推算
+        if (poseRawOdom)
+            posePosSourceDr = false;
+    }
     if (staticLockSec < 0.0)
         staticLockSec = 0.0;
     if (yawJumpDeg < 1.0)
@@ -334,6 +347,26 @@ bool TerminalConfig::load(const QString &iniPath)
     // α 松动告警阈值：常值偏差持续超过它才报（0=关闭）
     rtkYawBiasWarnDeg = qBound(0.0, s.value("Rtk/YawBiasWarnDeg", 3.0).toDouble(), 180.0);
 
+    // ---- 静置锚点：差分只做"停稳时锚定一次"，不做位姿流、不参与 k 标定 ----
+    // 格点量化 0.61×0.42m，单帧 RMS≈0.21m；静止重复采样的量化误差零均值，
+    // 窗口取中值可把标准差压到 0.05~0.1m，这是突破格点的唯一办法。
+    {
+        const QString mode = s.value("Rtk/AnchorMode", QStringLiteral("rest"))
+                                 .toString().trimmed().toLower();
+        rtkAnchorRest        = (mode != QStringLiteral("off"));
+        rtkAnchorWindow      = qBound(3, s.value("Rtk/AnchorWindow", 15).toInt(), 61);
+        rtkAnchorMaxSpreadM  = qBound(0.0, s.value("Rtk/AnchorMaxSpreadM", 0.30).toDouble(), 5.0);
+        rtkAnchorMinStillMs  = qBound(200, s.value("Rtk/AnchorMinStillMs", 1200).toInt(), 20000);
+        rtkAnchorMinApplyM   = qBound(0.0, s.value("Rtk/AnchorMinApplyM", 0.12).toDouble(), 5.0);
+        rtkAnchorBootMoveM   = qBound(0.3, s.value("Rtk/AnchorBootMoveM", 1.20).toDouble(), 20.0);
+        // 没有收到差分就谈不上锚定
+        if (!rtkEnabled)
+            rtkAnchorRest = false;
+        // 位置不走死推算时，"钉位姿"无处可钉（原始模式只对齐 raw 基准）
+        if (!posePosSourceDr)
+            rtkAnchorRest = false;
+    }
+
     // ---- 目标检测（YOLO26 检测结果 UDP → MQ 转发）----
     // 只做"收包、重组、原样转发"，不参与位姿与控制；缺段时保持关闭。
     detEnabled    = s.value("Detection/Enabled", false).toBool();
@@ -480,11 +513,14 @@ QStringList TerminalConfig::dumpParams() const
            .arg(mapParams.maxHeadingErrRad * 57.29577951308232, 0, 'f', 2)
            .arg(mapParams.coarseHeadingErrRad * 57.29577951308232, 0, 'f', 2)
            .arg(mapParams.minLineDist, 0, 'f', 2);
-    out << QStringLiteral("[Pose] yawstabilize=%1 staticlocksec=%2 yawjumpdeg=%3 maxframegapsec=%4 rawodom=%5")
+    out << QStringLiteral("[Pose] yawstabilize=%1 staticlocksec=%2 yawjumpdeg=%3 maxframegapsec=%4 rawodom=%5 posource=%6 drjumpk=%7 drjumpminm=%8")
            .arg(yawStabilize ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(staticLockSec, 0, 'f', 2).arg(yawJumpDeg, 0, 'f', 2)
            .arg(poseMaxGapSec, 0, 'f', 2)
-           .arg(poseRawOdom ? QStringLiteral("true") : QStringLiteral("false"));
+           .arg(poseRawOdom ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(posePosSourceDr ? QStringLiteral("dr") : QStringLiteral("odom"))
+           .arg(poseDrJumpK, 0, 'f', 1)
+           .arg(poseDrJumpMinM, 0, 'f', 2);
     out << QStringLiteral("[Nav] speedmode=%1 steering=%2 maxturnrate=%3 maxlinearspeed=%4 arriveradiusdefault=%5 softarrivemul=%6 maxaccel=%7 maxdecel=%8 postol=%9 debuglog=%10 ctrltickms=%11 staleStopms=%12")
            .arg(navParams.speedMode == Navigator::SpeedMode_Profile
                     ? QStringLiteral("profile") : QStringLiteral("cruise"))
@@ -499,7 +535,7 @@ QStringList TerminalConfig::dumpParams() const
            .arg(navParams.headingToleranceRad * 57.29577951308232, 0, 'f', 1)
            .arg(navParams.debugLog ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(navCtrlTickMs).arg(navCtrlStaleStopMs);
-    out << QStringLiteral("[Rtk] enabled=%1 routingkey=%2 diffid=%3 stale=%4 yawfromrtk=%5 useforpose=%6 autocalib=%7 autozero=%8 zerofromline=%9 holdms=%10 yawbiaswarn=%11")
+    out << QStringLiteral("[Rtk] enabled=%1 routingkey=%2 diffid=%3 stale=%4 yawfromrtk=%5 useforpose=%6 autocalib=%7 autozero=%8 zerofromline=%9 holdms=%10 yawbiaswarn=%11 anchormode=%12 anchorwin=%13 anchorspread=%14 anchorstillms=%15 anchorapplym=%16 anchorbootm=%17")
            .arg(rtkEnabled ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(rtkRoutingKey).arg(rtkDiffId).arg(rtkStaleMs)
            .arg(rtkYawFromRtk ? QStringLiteral("true") : QStringLiteral("false"))
@@ -508,7 +544,13 @@ QStringList TerminalConfig::dumpParams() const
            .arg(rtkAutoZero ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(rtkZeroFromLine ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(rtkHoldMs)
-           .arg(rtkYawBiasWarnDeg, 0, 'f', 1);
+           .arg(rtkYawBiasWarnDeg, 0, 'f', 1)
+           .arg(rtkAnchorRest ? QStringLiteral("rest") : QStringLiteral("off"))
+           .arg(rtkAnchorWindow)
+           .arg(rtkAnchorMaxSpreadM, 0, 'f', 2)
+           .arg(rtkAnchorMinStillMs)
+           .arg(rtkAnchorMinApplyM, 0, 'f', 2)
+           .arg(rtkAnchorBootMoveM, 0, 'f', 2);
     out << QStringLiteral("[Detection] enabled=%1 bind=%2 port=%3 routingkey=%4 maxhz=%5 skipempty=%6 verboselog=%7")
            .arg(detEnabled ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(detBind).arg(detPort)

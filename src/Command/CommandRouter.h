@@ -12,6 +12,7 @@ class MapTransform;
 class YawStabilizer;
 class DogClientBase;
 class ReportService;
+struct MotionState;
 
 // ============================================================
 // 下行指令处理器：报文解析 + 前置条件校验 + 下发
@@ -27,7 +28,8 @@ public:
     CommandRouter(const TerminalConfig &cfg, Navigator &navigator, AttitudeExecutor &attitude,
                   MapTransform &map, YawStabilizer &yaw, DogClientBase *&dog,
                   bool &controlAcquired, bool &velCtrlActive, ReportService &report,
-                  double &velFwd, double &velTurn, double &velShift, CommandHost &host);
+                  double &velFwd, double &velTurn, double &velShift, CommandHost &host,
+                  MotionState &state);
 
     void handleAttitudeCmd(const QByteArray &body);
     void handleMoveCmd(const QByteArray &body);
@@ -55,6 +57,9 @@ private:
     double &_velTurn;
     double &_velShift;
     CommandHost &_host;
+    // 姿态快照：mapreset / mapline 用的局部坐标必须与导航同一份
+    // （原始 odom.position 会在行走中整体跳 0.6~3m，会把参考点与尺度算歪）
+    MotionState &_st;
 
     // 速度直控被拒的日志/反馈节流：服务器常以 10~50Hz 连发 VelocityCmd，
     // 链路掉线时每帧都会打一行"狗未就绪"，把现场终端刷满屏。

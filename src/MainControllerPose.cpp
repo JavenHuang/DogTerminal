@@ -95,21 +95,74 @@ void MainController::onDogStateData()
         }
     }
 
-    // 先做里程计跳变补偿，保证后续参考建立/坐标变换使用的局部位置连续
-    compensateOdomJump(odom);
+    // ---- 0) 位置源：抗跳变死推算（[Pose] PosSource=dr，默认）----
+    // 狗端 odom.position 会整体重置：run9 实测 8 次单帧跳变 0.63~3.12m，
+    // 而包间隔只有 8~11ms（物理上最多走 9mm）——不是丢包，是坐标系重新起算。
+    // 跳变直接进导航 → Pure Pursuit 的方位角 α 瞬变几十度 → 原地画圈；
+    // 进地图 → "以为回到 0，其实没回"。DrPose 只积分合理步长，跳变帧整帧丢弃。
+    double poseX = odom.position[0];
+    double poseY = odom.position[1];
+    if (odom.valid)
+    {
+        const double vb = std::sqrt(static_cast<double>(odom.vBody[0]) * odom.vBody[0]
+                                    + static_cast<double>(odom.vBody[1]) * odom.vBody[1]);
+        const qint64 t = nowMs();
+        if (_cfg.posePosSourceDr)
+        {
+            _dr.feed(odom.position[0], odom.position[1], vb, t);
+            poseX = _dr.x();
+            poseY = _dr.y();
+        }
+        else
+        {
+            // 原始模式：只对齐 raw 基准，位姿仍用狗体原值
+            _dr.alignRaw(odom.position[0], odom.position[1], t);
+        }
+    }
+
+    // 里程计跳变补偿：死推算已把跳变挡在位姿之外，再平移地图参考反而把位姿推歪
+    if (_cfg.posePosSourceDr)
+        _lastOdomValid = false;      // 切回原始模式时重新对齐，避免跨模式误判
+    else
+        compensateOdomJump(odom);
+
     // yaw 稳定化：之后所有导航/地图/上报统一用 _yaw->yaw()，不再直接用 imu.rpy[2]
-    _yaw->update(odom, imu);
+    // 位置用过滤后的 pose，位移方向校核才不会把一次 3m 跳变当成"一步真实位移"
+    DogOdom pose = odom;
+    pose.position[0] = static_cast<float>(poseX);
+    pose.position[1] = static_cast<float>(poseY);
+    _yaw->update(pose, imu);
     compensateYawReset(odom, imu);
     // 位移方向校核：用直线前进的里程计位移方向独立验证/重建航向基准
-    _yaw->updateMotionHeading(odom, imu);
+    _yaw->updateMotionHeading(pose, imu);
 
     // 参考建立：终端启动后首个有效位姿自动建立（当前点=O点 朝向=0°正东），
     // 与狗开机时刻无关——狗可以先开机、先被遥控移动
     if (_map.params().enabled && _map.params().autoReference
         && !_map.hasReference() && odom.valid && imu.valid)
     {
-        resetMapReference(odom.position[0], odom.position[1], _yaw->yaw());
+        resetMapReference(poseX, poseY, _yaw->yaw());
         qInfo().noquote() << "[Map] 参考已建立（终端启动时狗位姿=O点/0°正东）:" << _map.describe();
+    }
+
+    // ---- 差分静置锚定：只在停稳时把位置钉到差分上，段内由死推算推进 ----
+    // 不产生位姿流：差分 1 次停稳只修正一次，修正量小于阈值直接不动（防抖）。
+    if (_rtk && _map.isActive() && odom.valid && imu.valid)
+    {
+        double ax = 0.0;
+        double ay = 0.0;
+        double asp = 0.0;
+        int    an = 0;
+        if (_rtk->takeAnchor(&ax, &ay, &an, &asp))
+        {
+            double mx = 0.0;
+            double my = 0.0;
+            double myaw = 0.0;
+            _map.toMap(poseX, poseY, _yaw->yaw(), &mx, &my, &myaw);
+            applyRtkAnchor(ax, ay, mx, my, an, asp);
+            poseX = _dr.x();
+            poseY = _dr.y();
+        }
     }
 
     // 直线标定行程监控：mapreset → mapline 之间每秒报"走了多少米"
@@ -125,8 +178,8 @@ void MainController::onDogStateData()
     {
         if (odom.valid)
         {
-            const double nx = odom.position[0];
-            const double ny = odom.position[1];
+            const double nx = poseX;
+            const double ny = poseY;
             // 位置差分推算速度（低通）：差分 5Hz 天生滞后，只有确实"没在动"时
             // 才能把差分当地图锚点用，所以这个速度值直接决定 offset 是否更新
             const double dtSec = (_st.ms > 0) ? (nowMs() - _st.ms) / 1000.0 : 0.0;
@@ -139,8 +192,7 @@ void MainController::onDogStateData()
                     _st.speed = (_st.speed <= 0.0) ? v : (_st.speed + 0.3 * (v - _st.speed));
             }
             _st.x   = nx;
-            _st.y   = ny;
-            _st.vx  = odom.vBody[0];
+            _st.y   = ny;            _st.vx  = odom.vBody[0];
         }
         _st.yaw     = _yaw->yaw();
         // 上报用的航向角速度：与 YawStabilizer 同源，gyro 缺失时退回里程计机体角速度
@@ -192,6 +244,10 @@ void MainController::resetMapReference(double localX, double localY, double loca
     _map.setScale(_yaw->calibScale());
     // 融合偏移与重启判据基准都绑在旧参考点上，交给跟踪器统一作废（尺度/转角继续沿用）
     _rtk->onMapRefReset();
+    // 参考朝向变了 → 地图系被整体旋转，差分系到地图系的转角估计与相对基准同时作废
+    _rkBaseValid = false;
+    _rkRotSamples = 0;
+    _rkRotRad = 0.0;
     // 地图 0° 就是"此刻狗的朝向"，所以差分零位必须锚在同一姿态上：
     // 融合模块自己等静止窗口取 b，取到之前不建立偏移，避免随机零位污染航向基准。
     if (_cfg.rtkEnabled)
@@ -207,6 +263,126 @@ void MainController::resetMapReference(double localX, double localY, double loca
 }
 
 
+
+// 差分静置锚点 → 位姿修正
+//
+// 为什么用"相对基准"，而不是把差分绝对坐标直接写进地图：
+//   差分给的是它自己的 ENU 原点，终端地图原点是 mapreset 那一刻的狗位姿，
+//   两者之间既有平移、也可能有旋转。直接把绝对坐标塞进地图，整张图的 0 点
+//   会跟着差分原点跑（infra 之前"标定 α 是 refYaw 附近"的混乱就源于此）。
+//   这里只记"上一次锚点的差分位置 + 当时的地图位姿"，用两次锚点之间的
+//   位移差校正地图位姿：平移和旋转都被这个位移差吸收，不需要知道谁对齐谁。
+//   特征：每段只在停稳时校一次，段内完全由 DrPose 推进，不产生位姿流。
+void MainController::applyRtkAnchor(double ax, double ay, double mapX, double mapY,
+                                    int frames, double spread)
+{
+    if (!_rkBaseValid)
+    {
+        _rkBaseValid = true;
+        _rkBaseRtkX = ax;
+        _rkBaseRtkY = ay;
+        _rkBaseMapX = mapX;
+        _rkBaseMapY = mapY;
+        qWarning().noquote()
+            << QStringLiteral("[Anchor] 基准建立：差分(%1, %2) ↔ 地图(%3, %4)"
+                              "（窗口 %5 帧 · 散布 %6m）——之后每次停稳用差分位移差校正地图位姿")
+                   .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2)
+                   .arg(mapX, 0, 'f', 2).arg(mapY, 0, 'f', 2)
+                   .arg(frames).arg(spread, 0, 'f', 2);
+        return;
+    }
+
+    const double drx = ax - _rkBaseRtkX;
+    const double dry = ay - _rkBaseRtkY;
+    const double dmx = mapX - _rkBaseMapX;
+    const double dmy = mapY - _rkBaseMapY;
+    const double lenR = std::sqrt(drx * drx + dry * dry);
+    const double lenM = std::sqrt(dmx * dmx + dmy * dmy);
+
+    // 转角观测：两段位移都够长时才采信（短段的方位噪声会被放大）
+    // 差分系与地图系如果本来就同向，观测应长期≈0；若长期是一个非零常值，
+    // 说明两套坐标系有固定夹角，后续按它换算即可。
+    const double boot = _cfg.rtkAnchorBootMoveM;
+    if (lenR >= boot && lenM >= boot)
+    {
+        const double obs = DogProtocol::radStd(std::atan2(dry, drx) - std::atan2(dmy, dmx));
+        if (std::fabs(obs) <= 60.0 * M_PI / 180.0)
+        {
+            if (_rkRotSamples == 0)
+                _rkRotRad = obs;
+            else
+                _rkRotRad = std::atan2(std::sin(_rkRotRad) + std::sin(obs),
+                                       std::cos(_rkRotRad) + std::cos(obs));
+            ++_rkRotSamples;
+            qInfo().noquote()
+                << QStringLiteral("[Anchor] 转角观测 %1°（已采 %2 段，当前估计 %3°）")
+                       .arg(obs * 180.0 / M_PI, 0, 'f', 1)
+                       .arg(_rkRotSamples)
+                       .arg(_rkRotRad * 180.0 / M_PI, 0, 'f', 1);
+        }
+    }
+
+    // 目标地图位姿 = 上次锚点地图位姿 + R(转角) × (差分位移)
+    const double c = std::cos(_rkRotRad);
+    const double s = std::sin(_rkRotRad);
+    const double tx = _rkBaseMapX + (c * drx - s * dry);
+    const double ty = _rkBaseMapY + (s * drx + c * dry);
+    const double ex = tx - mapX;
+    const double ey = ty - mapY;
+    const double err = std::sqrt(ex * ex + ey * ey);
+
+    // 超过 3m 的"修正"不可能是正常漂移：差分跳格 / 基准记错，本次不采纳并重置基准
+    if (err > 3.0)
+    {
+        qWarning().noquote()
+            << QStringLiteral("[Anchor] 修正量 %1m 异常，本次不采纳（疑似差分跳格或基准错位）；"
+                              "基准重置到当前：差分(%2, %3) ↔ 地图(%4, %5)")
+                   .arg(err, 0, 'f', 2)
+                   .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2)
+                   .arg(mapX, 0, 'f', 2).arg(mapY, 0, 'f', 2);
+        _rkBaseRtkX = ax;
+        _rkBaseRtkY = ay;
+        _rkBaseMapX = mapX;
+        _rkBaseMapY = mapY;
+        return;
+    }
+
+    if (err >= _cfg.rtkAnchorMinApplyM)
+    {
+        double lx = 0.0;
+        double ly = 0.0;
+        double lyaw = 0.0;
+        _map.toLocal(tx, ty, 0.0, &lx, &ly, &lyaw);
+        _dr.reset(lx, ly);
+        qWarning().noquote()
+            << QStringLiteral("[Anchor] 锚定修正 %1m：地图(%2, %3) → (%4, %5)"
+                              "（差分(%6, %7) · 本段%8m · 窗口%9帧 · 散布%10m）")
+                   .arg(err, 0, 'f', 2)
+                   .arg(mapX, 0, 'f', 2).arg(mapY, 0, 'f', 2)
+                   .arg(tx, 0, 'f', 2).arg(ty, 0, 'f', 2)
+                   .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2)
+                   .arg(lenM, 0, 'f', 2)
+                   .arg(frames).arg(spread, 0, 'f', 2);
+    }
+    else
+    {
+        // 校正量小于阈值时不即位姿：静止重复采样本就有 ±0.1m 抖动，
+        // 每次都跟着改会让地图显示来回蹭。
+        qInfo().noquote()
+            << QStringLiteral("[Anchor] 复核通过：残差 %1m < 阈值 %2m，不修正"
+                              "（差分(%3, %4) · 本段%5m · 窗口%6帧）")
+                   .arg(err, 0, 'f', 2)
+                   .arg(_cfg.rtkAnchorMinApplyM, 0, 'f', 2)
+                   .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2)
+                   .arg(lenM, 0, 'f', 2)
+                   .arg(frames);
+    }
+
+    _rkBaseRtkX = ax;
+    _rkBaseRtkY = ay;
+    _rkBaseMapX = tx;
+    _rkBaseMapY = ty;
+}
 
 void MainController::beginLineTrace()
 {

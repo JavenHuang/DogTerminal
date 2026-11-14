@@ -91,7 +91,7 @@ void MainController::initLinks()
 
     // 上报与诊断：只借用其它子对象，不拥有它们
     _report = new ReportService(_cfg, _mq, _map, *_yaw, *_rtk, _status, _dog, *_navigator,
-                                _controlAcquired, _velCtrlActive);
+                                _controlAcquired, _velCtrlActive, _st);
     _printer = new StatePrinter(_cfg, _dog, _map, *_yaw, *_rtk, _st);
 
     _mq->configure(_cfg.mqHost, _cfg.mqPort, _cfg.mqVhost,
@@ -178,6 +178,31 @@ void MainController::initChannels()
     _navigator->setParams(_cfg.navParams);
     _map.setParams(_cfg.mapParams);
 
+    // ---- 位置源：抗跳变死推算（[Pose] PosSource=dr）----
+    // 狗端 odom.position 会整体重置：run9 实测 8 次单帧跳变 0.63~3.12m，
+    // 而包间隔只有 8~11ms（物理上最多 9mm）。这个 position 直接进导航会让
+    // Pure Pursuit 的方位角瞬变几十度 → 原地画圈；进地图 → "以为回到 0 其实没回"。
+    {
+        DrPose::Params dp;
+        dp.enabled    = _cfg.posePosSourceDr;
+        dp.jumpK      = _cfg.poseDrJumpK;
+        dp.jumpMinM   = _cfg.poseDrJumpMinM;
+        dp.maxDtSec   = (_cfg.poseMaxGapSec > 0.2) ? _cfg.poseMaxGapSec : 2.0;
+        _dr.setParams(dp);
+        if (dp.enabled)
+        {
+            qInfo().noquote()
+                << QStringLiteral("[Pose] 位置源=死推算：只积分合理步长（允许步长 %1×|vBody|×dt + %2m），"
+                                  "跳变帧整帧丢弃；地图换算仍由 MapTransform 统一做")
+                       .arg(dp.jumpK, 0, 'f', 1).arg(dp.jumpMinM, 0, 'f', 2);
+        }
+        else
+        {
+            qWarning().noquote()
+                << QStringLiteral("[Pose] 位置源=原始里程计（PosSource=odom）：odom 整体跳变会原样进地图与导航");
+        }
+    }
+
     // ---- 差分融合（第二阶段）：差分做锚点、里程计做增量，位姿供导航与上报 ----
     {
         RtkFusion::Params fp;
@@ -227,6 +252,15 @@ void MainController::initChannels()
                        .arg(500);
             if (!fp.useRtkYaw)
                 qInfo().noquote() << "[Rtk] 航向不采信差分（YawFromRtk=false），朝向只走里程计 + 标定转角";
+            if (_cfg.rtkAnchorRest)
+                qWarning().noquote()
+                    << QStringLiteral("[Rtk] 差分只做静置锚点（AnchorMode=rest）：停稳 ≥%1ms 后"
+                                      "取 %2 帧中值（窗口散布 ≤%3m 才采信），修正量 ≥%4m 才动位姿；"
+                                      "段内位姿由里程计死推算推进，差分不进位姿流、不参与 k 标定")
+                           .arg(_cfg.rtkAnchorMinStillMs)
+                           .arg(_cfg.rtkAnchorWindow)
+                           .arg(_cfg.rtkAnchorMaxSpreadM, 0, 'f', 2)
+                           .arg(_cfg.rtkAnchorMinApplyM, 0, 'f', 2);
             if (fp.autoZeroYaw)
                 qInfo().noquote()
                     << QStringLiteral("[Rtk] 零位策略：建参考后自动取差分航向零位 b（静止 %1ms、%2 帧；"
@@ -313,5 +347,6 @@ void MainController::initEngines()
     // 下行指令：执行器由本类持有，路由器只借用
     _cmd = new CommandRouter(_cfg, *_navigator, *_attitude, _map, *_yaw, _dog,
                              _controlAcquired, _velCtrlActive, *_report,
-                             _nav->velFwdRef(), _nav->velTurnRef(), _nav->velShiftRef(), *this);
+                             _nav->velFwdRef(), _nav->velTurnRef(), _nav->velShiftRef(), *this,
+                             _st);
 }

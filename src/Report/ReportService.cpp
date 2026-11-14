@@ -14,6 +14,7 @@
 #include "Common/DogText.h"
 #include "Config/TerminalConfig.h"
 #include "Control/Navigator.h"
+#include "Control/MotionState.h"
 #include "Control/YawStabilizer.h"
 #include "Convert/MapTransform.h"
 #include "Convert/RtkPoseTracker.h"
@@ -24,10 +25,11 @@
 ReportService::ReportService(const TerminalConfig &cfg, MqLink *&mq, MapTransform &map,
                              YawStabilizer &yaw, RtkPoseTracker &rtk,
                              DogProtocol::TerminalStatus &status, DogClientBase *&dog,
-                             Navigator &navigator, bool &controlAcquired, bool &velCtrlActive)
+                             Navigator &navigator, bool &controlAcquired, bool &velCtrlActive,
+                             MotionState &state)
     : _cfg(cfg), _mq(mq), _map(map), _yaw(yaw), _rtk(rtk), _status(status),
       _dog(dog), _navigator(navigator), _controlAcquired(controlAcquired),
-      _velCtrlActive(velCtrlActive)
+      _velCtrlActive(velCtrlActive), _st(state)
 {
 }
 
@@ -112,10 +114,15 @@ DogProtocol::DogState ReportService::buildDogState() const
         const DogBattery &bat = _dog->battery();
         const DogBasic &basic = _dog->basic();
 
+        // 位置取姿态快照：它已经是"抗跳变死推算 + 静置锚定修正"之后的值，
+        // 与导航、地图显示同一份，避免上报的地图和狗实际位置各说各话。
+        const double poseX = _st.valid ? _st.x : static_cast<double>(odom.position[0]);
+        const double poseY = _st.valid ? _st.y : static_cast<double>(odom.position[1]);
+
         if (st.calibrated)
         {
             // 上报坐标与朝向同样取融合位姿（差分锚点 + 里程计增量）；
-            // 融合尚未建立时退回纯里程计推出的地图位姿
+            // 融合未接管（UseForPose=false，当前默认）时用死推算位姿换地图坐标
             double fmx = 0.0;
             double fmy = 0.0;
             double fmyaw = 0.0;
@@ -128,15 +135,15 @@ DogProtocol::DogState ReportService::buildDogState() const
             }
             else
             {
-                _map.toMap(odom.position[0], odom.position[1], _yaw.yaw(),
+                _map.toMap(poseX, poseY, _yaw.yaw(),
                            &st.x, &st.y, &st.yaw);
             }
             st.z = odom.position[2];
         }
         else
         {
-            st.x = odom.position[0];
-            st.y = odom.position[1];
+            st.x = poseX;
+            st.y = poseY;
             st.z = odom.position[2];
             st.yaw = _yaw.yaw();
         }
@@ -145,13 +152,13 @@ DogProtocol::DogState ReportService::buildDogState() const
         // 服务端两套轨迹才能同框叠加；未建立参考时上报原始值。
         if (_map.isActive())
         {
-            st.localX = odom.position[0] - _map.refLocalX();
-            st.localY = odom.position[1] - _map.refLocalY();
+            st.localX = poseX - _map.refLocalX();
+            st.localY = poseY - _map.refLocalY();
         }
         else
         {
-            st.localX = odom.position[0];
-            st.localY = odom.position[1];
+            st.localX = poseX;
+            st.localY = poseY;
         }
         st.localYaw = _yaw.yaw();
         st.roll = imu.rpy[0];

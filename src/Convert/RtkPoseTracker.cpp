@@ -36,6 +36,18 @@ RtkPoseTracker::RtkPoseTracker(const TerminalConfig &cfg, MapTransform &map,
                                RtkFusion &fusion, MotionState &state)
     : _cfg(cfg), _map(map), _fusion(fusion), _st(state), _jump(cfg, fusion)
 {
+    // 静置锚点参数：窗口帧数 / 散布上限 / 停稳门槛 / 新鲜度
+    RtkAnchor::Params ap;
+    ap.enabled       = cfg.rtkAnchorRest;
+    ap.windowFrames  = cfg.rtkAnchorWindow;
+    ap.maxSpreadM    = cfg.rtkAnchorMaxSpreadM;
+    ap.minStillMs    = cfg.rtkAnchorMinStillMs;
+    // 停稳判据沿用差分的静止门控：|vBody| 与 |gyro_z|，避免两套阈值打架
+    ap.maxSpeedMps   = (cfg.rtkOffStaticSpeed > 0.0) ? cfg.rtkOffStaticSpeed : 0.05;
+    // kRadToDeg 是"每弧度多少度"，度→弧度要除；写成乘会得到 286 rad/s 等于没判
+    ap.maxYawRateRad = cfg.rtkOffSlowYawRateDeg / kRadToDeg;
+    ap.staleMs       = cfg.rtkHoldMs;
+    _anchor.setParams(ap);
 }
 
 void RtkPoseTracker::onFrame(const QByteArray &body)
@@ -95,6 +107,15 @@ void RtkPoseTracker::onFrame(const QByteArray &body)
         if (!_jump.accept(cx, cy, yawMap, recvMs, _rtkX, _rtkY, _rtkYaw,
                           hasOdomNow, omyawNow))
             return;
+    }
+
+    // 静置锚点：只把"通过门控的帧"喂进窗口。
+    // 速度/角速度取终端自己的运动状态（不是差分给的），因为差分不给速度。
+    if (_anchor.enabled())
+    {
+        const double vNow  = (_st.valid) ? std::fabs(_st.vx) : 1e9;
+        const double yrNow = (_st.valid) ? _st.yawRate : 1e9;
+        _anchor.onFrame(cx, cy, vNow, yrNow, recvMs);
     }
 
     // 同一时刻的里程计地图位姿：融合的参照点。
@@ -321,6 +342,10 @@ void RtkPoseTracker::onFrame(const QByteArray &body)
             .arg(calibText).arg(srcText).arg(zeroText);
     }
 
+    // 静置锚点状态（1Hz，仅 AnchorMode=rest 时）：窗口帧数 / 停稳时长 / 弃窗次数
+    if (_cfg.rtkEnabled && _cfg.rtkAnchorRest)
+        qInfo().noquote() << QStringLiteral("[Anchor] %1").arg(_anchor.describe());
+
     // ---- 标定面板：把上面这些量压成固定 8 行，1Hz 发到 MQ 供服务端常驻显示 ----
     // 判定（下一步该做什么）在这里当场算，服务端不需要懂标定逻辑，只显示。
     if (_panel)
@@ -443,9 +468,16 @@ void RtkPoseTracker::onMapRefReset()
 
 void RtkPoseTracker::setNavActive(bool active)
 {
-    if (!_cfg.rtkEnabled)
-        return;   // 差分关闭时不产生"请求同步/任务同步"日志，也不动融合状态
+    if (!_cfg.rtkEnabled || !_cfg.rtkUseForPose)
+        return;   // 差分未启用 / 未接管位姿：不产生同步日志，也不动融合状态
     _fusion.setNavActive(active);
+}
+
+bool RtkPoseTracker::takeAnchor(double *x, double *y, int *frames, double *spread)
+{
+    if (!_cfg.rtkEnabled || !_anchor.enabled())
+        return false;
+    return _anchor.take(x, y, frames, spread);
 }
 
 // 断流观测：服务端标称 200ms，实测常见 500~560ms，偶尔 1s。

@@ -85,6 +85,14 @@ struct TerminalConfig
     // 现场怀疑"补偿逻辑本身带偏"时用它跑一轮对照；断链/遥控接管导致的
     // yaw 台阶会原样进地图（这是预期行为，不是 bug）。
     bool   poseRawOdom;         // [Pose] RawOdom
+    // ---- 位置源（抗跳变死推算）----
+    // 狗端 odom.position 会整体重置：run9 实测 8 次单帧跳变 0.63~3.12m，
+    // 而包间隔只有 8~11ms（物理上最多 9mm）。跳变直接进导航 → Pure Pursuit
+    // 的方位角 α 瞬变几十度 → 原地画圈。开启后只积分"合理步长"，
+    // 跳变帧整帧丢弃，位姿连续；地图换算仍由 MapTransform 统一做。
+    bool   posePosSourceDr;     // [Pose] PosSource=dr（false=odom，原始直通）
+    double poseDrJumpK;         // [Pose] DrJumpK：允许步长 = K×|vBody|×dt + 下限
+    double poseDrJumpMinM;      // [Pose] DrJumpMinM：允许步长下限 m
 
     // ---- 导航参数 ----
     Navigator::Params navParams;
@@ -148,6 +156,16 @@ struct TerminalConfig
     // 差分航向与里程计地图航向的常值偏差长期贴近 0 才正常；持续超过该阈值
     // 说明标定用的安装角 α 与实物不符（松动/被撞偏/换过安装位置）。
     double rtkYawBiasWarnDeg;    // 常值偏差告警阈值 度（默认 3.0，0=关闭告警）
+
+    // ---- 静置锚点（AnchorMode=rest）----
+    // 差分只做"停稳时把位置锚定一次"，不做位姿流、不参与 k 标定。
+    // 位置精度靠窗口中值突破 0.61×0.42m 格点；段内由 DrPose 推进。
+    bool   rtkAnchorRest;        // [Rtk] AnchorMode=rest（off=不产锚点）
+    int    rtkAnchorWindow;      // 静止窗口取中值的帧数（默认 15）
+    double rtkAnchorMaxSpreadM;  // 窗口内允许的最大散布 m（默认 0.30，超限弃窗）
+    int    rtkAnchorMinStillMs;  // 停稳持续多久才开始取窗 ms（默认 1200）
+    double rtkAnchorMinApplyM;   // 修正量小于该值不动位姿 m（默认 0.12，防抖）
+    double rtkAnchorBootMoveM;   // 估计"差分系→地图系"转角所需的最小段长 m（默认 1.2）
 
     // ---- 目标检测（YOLO26 检测结果 UDP → MQ 转发）----
     // 188 的检测服务把每帧推理结果（完整 JSON 或 base64 分片）发到本机端口，

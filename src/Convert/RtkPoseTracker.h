@@ -6,6 +6,7 @@
 #include <QtGlobal>
 
 #include "Control/RtkJumpGate.h"
+#include "Convert/RtkAnchor.h"
 #include "Convert/RtkFrameReader.h"
 #include "Convert/RtkFusion.h"   // RtkFusion::SrcNone/SrcRtk/SrcHold（对外返回值）
 
@@ -67,6 +68,13 @@ public:
     // 标定持久化路径（rtkcalib_<id>.ini，与 mapcalib 同目录）
     QString calibPath() const;
 
+    // ---- 静置锚点（[Rtk] AnchorMode=rest）----
+    // 只产"停稳后的差位置中值"，不产生位姿流；要不要修正、怎么换算成局部
+    // 由 MainController 决定（见 MainControllerPose::applyRtkAnchor）。
+    bool takeAnchor(double *x, double *y, int *frames, double *spread);
+    QString anchorText() const { return _anchor.describe(); }
+    qint64 lastAnchorFrameMs() const { return _anchor.lastFrameMs(); }
+
     // 诊断：是否已收到过差分帧 / 最近一帧时刻（上报与打印用）
     bool seen() const { return _rtkSeen; }
     qint64 lastRecvMs() const { return _rtkRecvMs; }
@@ -81,6 +89,7 @@ private:
     CalibPanel *_panel = nullptr;
     RtkFrameReader _reader;   // 载荷 → AbsPoseCmd
     RtkJumpGate _jump;        // 单帧跳变/重启门控
+    RtkAnchor _anchor;        // 静置窗口取中值 → 锚点（只产点，不改位姿）
 
     // ---- 观测状态 ----
     bool   _rtkSeen = false;

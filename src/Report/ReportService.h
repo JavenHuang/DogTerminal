@@ -6,6 +6,8 @@
 
 #include "Protocol/DogProtocol.h"   // DogState / TerminalStatus / MoveResult
 
+struct MotionState;
+
 class TerminalConfig;
 class MqLink;
 class MapTransform;
@@ -31,7 +33,8 @@ class ReportService
 public:
     ReportService(const TerminalConfig &cfg, MqLink *&mq, MapTransform &map, YawStabilizer &yaw,
                   RtkPoseTracker &rtk, DogProtocol::TerminalStatus &status, DogClientBase *&dog,
-                  Navigator &navigator, bool &controlAcquired, bool &velCtrlActive);
+                  Navigator &navigator, bool &controlAcquired, bool &velCtrlActive,
+                  MotionState &state);
     ~ReportService() = default;
 
     ReportService(const ReportService &) = delete;
@@ -62,6 +65,9 @@ private:
     Navigator &_navigator;
     bool &_controlAcquired;
     bool &_velCtrlActive;
+    // 姿态快照：位置取它（已含抗跳变死推算与静置锚定修正），
+    // 不直接读 odom.position，否则上报的地图位置和导航用的位置会是两套
+    MotionState &_st;
 };
 
 #endif  // REPORT_SERVICE_H

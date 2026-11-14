@@ -136,13 +136,16 @@ void StatePrinter::print()
                    .arg(suspect ? QStringLiteral("  <-- 可疑跳变") : QString());
 
         // 地图坐标（仅启用且已建立参考时打印），便于现场核对局部→地图变换。
-        // 若融合位姿已可用，同时打印实际上报的数值，便于比对"里程计推算"与"差分校准"
+        // 换了位置源之后，地图必须用"死推算位姿"（= 导航与上报同一份），
+        // 不然这里打出来的地图会和上报/导航对不上，现场会误判成又出了新 bug。
         if (_map.isActive() && imu.valid)
         {
+            const double px = _st.valid ? _st.x : lx;
+            const double py = _st.valid ? _st.y : ly;
             double mx = 0.0;
             double my = 0.0;
             double myaw = 0.0;
-            _map.toMap(lx, ly, _yaw.yaw(), &mx, &my, &myaw);
+            _map.toMap(px, py, _yaw.yaw(), &mx, &my, &myaw);
             QString fusedText;
             double fmx = 0.0;
             double fmy = 0.0;
@@ -158,12 +161,15 @@ void StatePrinter::print()
                                                                : QStringLiteral("差分保持"));
             }
             qInfo().noquote()
-                << QStringLiteral("[DogState] t=%1 地图(x %2, y %3, yaw %4°, scale %5)%6")
+                << QStringLiteral("[DogState] t=%1 地图(x %2, y %3, yaw %4°, scale %5) "
+                                  "死推算局部(x %6, y %7)%8")
                        .arg(stamp)
                        .arg(mx, 0, 'f', 2)
                        .arg(my, 0, 'f', 2)
                        .arg(degNorm360(myaw * kRadToDeg), 0, 'f', 1)
                        .arg(_map.scale(), 0, 'f', 3)
+                       .arg(px, 0, 'f', 2)
+                       .arg(py, 0, 'f', 2)
                        .arg(fusedText);
         }
 
