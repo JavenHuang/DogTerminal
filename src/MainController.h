@@ -139,6 +139,8 @@ private:
     void compensateOdomJump(const DogOdom &odom);
     // 重建地图参考（尺度从 YawStabilizer 取，参考变更后仍沿用）
     void resetMapReference(double localX, double localY, double localYaw) override;
+    // 地图标定结果 → 融合标定（现场"只标方向、不打 4 个停点"的入口）
+    void applyMapCalibToFusion() override;
 
     // 里程计跳变检测：上一次有效原始位姿（用于识别 odom 坐标系重置）
     bool _lastOdomValid = false;

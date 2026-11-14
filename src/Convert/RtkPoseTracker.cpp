@@ -441,6 +441,11 @@ void RtkPoseTracker::onMapRefReset()
     _jump.reset();
 }
 
+void RtkPoseTracker::setNavActive(bool active)
+{
+    _fusion.setNavActive(active);
+}
+
 // 断流观测：服务端标称 200ms，实测常见 500~560ms，偶尔 1s。
 // 阈值取 max(配置值, 3 个实测平均周期)，避免把正常抖动当成断流刷告警。
 // 只告警，不干预控制；恢复后不再重复告警（与原行为一致）。

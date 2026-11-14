@@ -4,10 +4,21 @@
 #include <QSettings>
 #include <QtMath>
 #include <cmath>
+#include <algorithm>
 
 namespace {
 
 const double kPi = 3.14159265358979323846;
+
+// 中值：静止窗口里差分可能在相邻格点间翻，均值会被单帧极值拖偏，中值不会
+inline double medOf(QVector<double> v)
+{
+    if (v.isEmpty())
+        return 0.0;
+    std::sort(v.begin(), v.end());
+    const int n = v.size();
+    return (n % 2 == 1) ? v.at(n / 2) : 0.5 * (v.at(n / 2 - 1) + v.at(n / 2));
+}
 
 inline double radStdLocal(double a)
 {
@@ -29,6 +40,7 @@ inline double deg0To360(double rad)
 void RtkFusion::clearSamples()
 {
     _samples.clear();
+    _stillBuf.clear();
     _n = 0;
     _spx = _spy = _sqx = _sqy = 0.0;
     _spxqx = _spyqy = _spxqy = _spyqx = 0.0;
@@ -40,6 +52,42 @@ void RtkFusion::clearSamples()
     _prevPy = 0.0;
     _lastSolveMs = 0;
     _bandRejectWarned = false;   // 换了参考点/重标后允许再报一次越界
+}
+
+void RtkFusion::setCalibFromMap(double k, double alphaRad)
+{
+    Calib c;
+    c.valid = true;
+    c.k = (k > 1e-6) ? k : 1.0;
+    c.alphaRad = radStdLocal(alphaRad);
+    c.alphaYawRad = c.alphaRad;
+    c.rmsM = 0.0;      // 未解算，不产生 RMS（面板显示 0 是"来自地图标定"，不是"解失败"）
+    c.pathM = 0.0;
+    c.samples = 0;
+    _calib = c;
+    clearSamples();
+    _snapNext = true;
+    _syncPending = true;
+    qInfo().noquote() << QStringLiteral(
+        "[Rtk] 标定取自地图（mapreset/mapline）：k=%1 α=%2° —— 不再依赖停点解算")
+        .arg(c.k, 0, 'f', 3).arg(c.alphaRad * 180.0 / kPi, 0, 'f', 2);
+}
+
+void RtkFusion::requestSync(const QString &reason)
+{
+    _syncPending = true;
+    _snapNext = true;
+    qInfo().noquote() << QStringLiteral(
+        "[Rtk] 请求同步（%1）：下一帧差分到达即吸附位置与航向").arg(reason);
+}
+
+void RtkFusion::setNavActive(bool active)
+{
+    if (active == _navActive)
+        return;
+    _navActive = active;
+    // 只在任务边界同步：开始前一帧差分成绝对基准，整段交给里程计；到点再吸一次。
+    requestSync(active ? QStringLiteral("导航开始") : QStringLiteral("任务结束"));
 }
 
 void RtkFusion::reset()
@@ -224,6 +272,11 @@ void RtkFusion::onRtkFrame(double rtkX, double rtkY, double rtkYaw,
     const double yawRateDeg = std::fabs(yawRateRad) * 180.0 / kPi;
     const bool stillNow = (speedMps < _p.offStaticSpeed) && (yawRateDeg < _p.offSlowYawRateDeg);
     const bool slowNow = (speedMps < _p.offSlowSpeed) && (yawRateDeg < _p.offSlowYawRateDeg);
+
+    // ---- 任务级同步模式：段内一律冻结 offset，只在任务边界吸附 ----
+    // 注意只作用于"offset 跟踪"，不影响零位 b 的静止窗口取样与锚点采集。
+    const bool stillTrk = (_p.syncOnlyOnTask && !_syncPending) ? false : stillNow;
+    const bool slowTrk = (_p.syncOnlyOnTask && !_syncPending) ? false : slowNow;
 
     // ---- 差分航向零位 b：在“建参考之后”的静止窗口内取一次 ----
     // 差分航向每次上电的零位是随机的（转向增量准确）。建参考那一姿态就是地图 0°，
@@ -410,6 +463,7 @@ void RtkFusion::onRtkFrame(double rtkX, double rtkY, double rtkYaw,
         _staticSinceMs = 0;
         _staticStill = false;
         _staticPointTaken = false;
+        _stillBuf.clear();
     }
 
     // 标定样本只采"静止锚点"：停稳后每段采一个点，段内不再重复采。
@@ -419,32 +473,94 @@ void RtkFusion::onRtkFrame(double rtkX, double rtkY, double rtkYaw,
     // 会让 k 和 α 系统性偏掉。
     if (_p.autoCalib && !_calib.valid && !zeroPendingNow && _staticStill && !_staticPointTaken)
     {
-        bool farEnough = true;
-        for (int i = 0; i < _samples.size(); ++i)
+        // 先攒够一个"静止窗口"，再取中值当锚点。单帧取样的致命处在于：
+        // 差分被量化在 0.61×0.42m 格点上，静止时狗体微晃就会翻格，
+        // 恰好落在边界那一帧就是 ±0.6m 的错点，4 个点里错 1 个就解歪。
+        Sample s;
+        s.px = rtkX;
+        s.py = rtkY;
+        s.qx = odomX;
+        s.qy = odomY;
+        s.dyaw = radStdLocal(rtkYawUsed - odomYaw);
+        _stillBuf.append(s);
+
+        const int need = (_p.calibStaticAvgFrames > 1) ? _p.calibStaticAvgFrames : 1;
+        if (_stillBuf.size() >= need)
         {
-            const Sample &sm = _samples.at(i);
-            if (std::sqrt((odomX - sm.qx) * (odomX - sm.qx)
-                          + (odomY - sm.qy) * (odomY - sm.qy)) < _p.calibPointGapM)
+            _staticPointTaken = true;   // 本静止段只处理一次（采到或丢弃都算处理过）
+
+            QVector<double> xs;
+            QVector<double> ys;
+            QVector<double> ds;
+            for (int i = 0; i < _stillBuf.size(); ++i)
             {
-                farEnough = false;   // 原地重复停，同一个位置不算新点
-                break;
+                xs.append(_stillBuf.at(i).px);
+                ys.append(_stillBuf.at(i).py);
+                ds.append(_stillBuf.at(i).dyaw);
             }
-        }
-        _staticPointTaken = true;
-        if (farEnough)
-        {
-            Sample sa;
-            sa.px = rtkX;
-            sa.py = rtkY;
-            sa.qx = odomX;
-            sa.qy = odomY;
-            sa.dyaw = radStdLocal(rtkYawUsed - odomYaw);
-            addSample(sa, true);
-            qInfo().noquote() << QStringLiteral(
-                "[Rtk] 静止锚点 #%1 差分(%2, %3) 里程计(%4, %5) 累计里程=%6m")
-                .arg(_n).arg(rtkX, 0, 'f', 2).arg(rtkY, 0, 'f', 2)
-                .arg(odomX, 0, 'f', 2).arg(odomY, 0, 'f', 2)
-                .arg(_path, 0, 'f', 2);
+            const double pxMed = medOf(xs);
+            const double pyMed = medOf(ys);
+            const double dyawMed = medOf(ds);
+            // 里程计取窗口末帧（里程计连续、无格点，静止时几乎不动）
+            const double qxNow = _stillBuf.last().qx;
+            const double qyNow = _stillBuf.last().qy;
+
+            // 窗口内差分散布：这就是现场肉眼看到的"跳"，这里量化成米
+            double rx = 0.0;
+            double ry = 0.0;
+            for (int i = 0; i < xs.size(); ++i)
+            {
+                if (std::fabs(xs.at(i) - pxMed) > rx)
+                    rx = std::fabs(xs.at(i) - pxMed);
+                if (std::fabs(ys.at(i) - pyMed) > ry)
+                    ry = std::fabs(ys.at(i) - pyMed);
+            }
+            const double spread = std::sqrt(rx * rx + ry * ry);
+            _stillBuf.clear();
+
+            if (_p.calibStaticSpreadM > 0.0 && spread > _p.calibStaticSpreadM)
+            {
+                qWarning().noquote() << QStringLiteral(
+                    "[Rtk] 静止锚点丢弃：窗口 %1 帧差分散布=%2m 超上限 %3m"
+                    "（差分在跳格，狗停住后请再等 2~3 秒让它稳定，或挪 30cm 重停）")
+                    .arg(need).arg(spread, 0, 'f', 3).arg(_p.calibStaticSpreadM, 0, 'f', 2);
+            }
+            else
+            {
+                bool farEnough = true;
+                for (int i = 0; i < _samples.size(); ++i)
+                {
+                    const Sample &sm = _samples.at(i);
+                    if (std::sqrt((qxNow - sm.qx) * (qxNow - sm.qx)
+                                  + (qyNow - sm.qy) * (qyNow - sm.qy)) < _p.calibPointGapM)
+                    {
+                        farEnough = false;   // 原地重复停，同一个位置不算新点
+                        break;
+                    }
+                }
+                if (farEnough)
+                {
+                    Sample sa;
+                    sa.px = pxMed;
+                    sa.py = pyMed;
+                    sa.qx = qxNow;
+                    sa.qy = qyNow;
+                    sa.dyaw = dyawMed;
+                    addSample(sa, true);
+                    qInfo().noquote() << QStringLiteral(
+                        "[Rtk] 静止锚点 #%1 差分(%2, %3)[%4 帧中值, 散布 %5m] 里程计(%6, %7) 累计里程=%8m")
+                        .arg(_n).arg(pxMed, 0, 'f', 2).arg(pyMed, 0, 'f', 2)
+                        .arg(need).arg(spread, 0, 'f', 3)
+                        .arg(qxNow, 0, 'f', 2).arg(qyNow, 0, 'f', 2)
+                        .arg(_path, 0, 'f', 2);
+                }
+                else
+                {
+                    qInfo().noquote() << QStringLiteral(
+                        "[Rtk] 静止锚点跳过：距已有点不足 %1m（原地重复停不算新点）")
+                        .arg(_p.calibPointGapM, 0, 'f', 2);
+                }
+            }
         }
     }
 
@@ -481,10 +597,18 @@ void RtkFusion::onRtkFrame(double rtkX, double rtkY, double rtkYaw,
     const double dYaw = std::fabs(radStdLocal(measYaw - _offYaw));
     const double snapPos = stillNow ? _p.snapM : (_p.snapM * 3.0);
     const double snapYaw = stillNow ? 0.5236 : 1.5708;   // 30° / 90°
-    if (_snapNext || dPos > snapPos || dYaw > snapYaw)
+    if (_snapNext || (stillTrk && dPos > snapPos) || (stillTrk && dYaw > snapYaw))
     {
-        const bool forced = _snapNext;   // 标定刚更新导致的吸附，不算异常，不告警
+        const bool forced = _snapNext;   // 标定刚更新/任务同步导致的吸附，不算异常，不告警
         _snapNext = false;
+        if (_syncPending)
+        {
+            _syncPending = false;
+            ++_syncCount;
+            qInfo().noquote() << QStringLiteral(
+                "[Rtk] 任务同步 #%1：位置吸附 Δ=%2m Δyaw=%3°（此后段内只用里程计）")
+                .arg(_syncCount).arg(dPos, 0, 'f', 2).arg(dYaw * 180.0 / kPi, 0, 'f', 1);
+        }
         if (!forced && !_bigWarned)
         {
             _bigWarned = true;
@@ -500,7 +624,7 @@ void RtkFusion::onRtkFrame(double rtkX, double rtkY, double rtkYaw,
         _driftCount = 0;
         _driftWarned = false;
     }
-    else if (!slowNow)
+    else if (!slowTrk)
     {
         // 运动中（或转动中）冻结 offset：这时的差分值是 0.2~0.5s 前的位姿，
         // 拿它去算偏移只会把这 0.1~0.5m 的错位固化进地图，宁可整段不信。
@@ -527,7 +651,7 @@ void RtkFusion::onRtkFrame(double rtkX, double rtkY, double rtkYaw,
     else
     {
         const double dt = (_offMs > 0) ? static_cast<double>(tMs - _offMs) / 1000.0 : 0.2;
-        const double tau = stillNow
+        const double tau = stillTrk
                                ? ((_p.offStaticTauSec > 1e-3) ? _p.offStaticTauSec : 0.3)
                                : ((_p.offSlowTauSec > 1e-3) ? _p.offSlowTauSec : 2.0);
         double a = 1.0 - std::exp(-dt / tau);

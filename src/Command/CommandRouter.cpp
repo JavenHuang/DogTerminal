@@ -270,6 +270,8 @@ void CommandRouter::handleMapCalibCmd(const QByteArray &body)
         }
         _host.resetMapReference(odom.position[0], odom.position[1], _yaw.yaw());
         qInfo().noquote() << "[Map] 参考已重建（当前点=O点 朝向=0°正东）:" << _map.describe();
+        // 参考一建好就有一份可用标定：k=尺度、α=refYaw。之后靠近距离 mapline 定方向即可。
+        _host.applyMapCalibToFusion();
         _report.publishFeedback(cmd.taskId, DogProtocol::MR_ACCEPTED,
                         QStringLiteral("地图参考已建立: %1").arg(_map.describe()));
         break;
@@ -319,6 +321,8 @@ void CommandRouter::handleMapCalibCmd(const QByteArray &body)
                 qInfo().noquote() << "[Map] 当前参数:" << _map.describe();
                 if (grade == MapTransform::CalibExact)
                     _yaw.saveCalibScale(_map.scale());
+                // 方向已由"向东 N 米 + 终点坐标"定死：直接回填融合，不再走停点解算
+                _host.applyMapCalibToFusion();
                 _report.publishFeedback(cmd.taskId, DogProtocol::MR_ARRIVED, msg);
             }
         }

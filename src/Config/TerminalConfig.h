@@ -108,6 +108,9 @@ struct TerminalConfig
     double rtkCalibMaxRmsM;      // 解算允许的最大残差 RMS m（默认 0.12）
     int    rtkCalibStaticHoldMs; // 持续静止多久才算一个静止锚点 ms（默认 1500）
     double rtkCalibPointGapM;    // 两个静止锚点最小间距 m（默认 0.35，原地重复停不算新点）
+    int    rtkCalibStaticAvgFrames; // 锚点取"静止窗口 N 帧中值"（默认 9；1=单帧旧行为）
+    double rtkCalibStaticSpreadM;   // 窗口内差分散布上限 m（默认 0.25，超限丢弃该锚点；0=不判）
+    bool   rtkSyncOnlyOnTask;       // 只在任务开始/结束时同步差分（默认 true；false=旧行为，静止持续重锚）
     double rtkOffsetTauSec;      // 兼容旧配置；慢速微调改由 OffsetSlowTauSec 控制
     int    rtkHoldMs;            // 差分断流后保持偏移外推的时长 ms（默认 2000）
     bool   rtkYawFromRtk;        // 是否用差分航向做绝对朝向（服务端航向恒 0 时置 false）

@@ -121,6 +121,8 @@ void NavBridge::stepFromCache()
         _rtk.setPoseSrc(RtkFusion::SrcNone);
     // 位置/朝向取融合结果；速度量仍取里程计（仅作增益自适应与转向阻尼）
     _navigator.update(nx, ny, nyaw, _st.vx, _st.yawRate);
+    // 任务边界同步：导航开始前/结束后各让差分吸附一次，段内不再跟踪（见 Rtk/SyncOnlyOnTask）
+    _rtk.setNavActive(_navigator.isActive());
 }
 
 void NavBridge::tick()

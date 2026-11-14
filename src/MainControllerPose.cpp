@@ -169,6 +169,21 @@ void MainController::resetMapReference(double localX, double localY, double loca
 
 
 
+void MainController::applyMapCalibToFusion()
+{
+    // 地图系是"参考姿态定 0°、以 refYaw 为起始角"建起来的，所以把里程计局部系
+    // 转到地图系的转角恒等于 refYaw；尺度就是 mapcalib 估出的 Scale。
+    // 这两个量一旦确定，k/α 就不必再从停点里解——现场的 4 点共线、差分跳格
+    // 都不会再让标定卡住。
+    if (!_map.isActive())
+    {
+        qWarning().noquote() << "[Rtk] 地图坐标未启用，跳过标定回填（融合继续用旧值）";
+        return;
+    }
+    _fusion.setCalibFromMap(_map.scale(), _map.refYaw());
+}
+
+
 void MainController::compensateOdomJump(const DogOdom &odom)
 {
     if (!odom.valid)

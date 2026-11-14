@@ -70,6 +70,17 @@ public:
         double offSlowTauSec;    // 慢速时的 offset 低通时间常数 s（默认 2.0）
         int    calibStaticHoldMs;// 持续静止多久才算一个"静止锚点" ms（默认 1500）
         double calibPointGapM;   // 两个静止锚点的最小间距 m（默认 0.35，避免原地重复停）
+        // 锚点坐标取"静止窗口中值"而不是单帧：差分被量化在 0.61×0.42m 格点上，
+        // 静止时狗体微晃/差分内部翻格会让单帧读数错一个格子（±0.6m），
+        // 4 个锚点错 1 个就足以把 k/α 解歪。窗口内取中值可滤掉偶发跳格。
+        int    calibStaticAvgFrames; // 取中值的帧数（默认 9；1=退回单帧旧行为）
+        double calibStaticSpreadM;   // 窗口内差分散布上限 m（默认 0.25；超限丢弃该锚点，0=不判）
+
+        // ---- 任务级同步（现场"只标方向、坐标只在任务边界同步"的模式）----
+        // true：段内一律冻结 offset（不跟静止门控微调），位姿靠里程计增量推进；
+        //       只在 setNavActive() 的上升沿（任务开始）与下降沿（任务结束）吸附一次。
+        // false：旧行为，静止时用差分持续微调（差分抖动会进段内轨迹）。
+        bool   syncOnlyOnTask;
 
         // ---- 差分航向零位 b（会话量，每次"建参考"重取一次）----
         // 差分航向每次上电的零位随机、转向增量准确。地图参考建立的那一姿态就是
@@ -111,6 +122,9 @@ public:
             , offSlowTauSec(2.0)
             , calibStaticHoldMs(1500)
             , calibPointGapM(0.35)
+            , calibStaticAvgFrames(9)
+            , calibStaticSpreadM(0.25)
+            , syncOnlyOnTask(true)
             , autoZeroYaw(true)
             , zeroHoldMs(800)
             , zeroMinFrames(3)
@@ -161,6 +175,19 @@ public:
 
     void setCalib(const Calib &c) { _calib = c; }
     const Calib &calib() const { return _calib; }
+
+    // 直接用地图标定（mapreset / mapline）给定的尺度与转角写入标定，
+    // 不走"停点解算"。现场含义：开机建参考（原点=(0,0)、朝向=0°正东）后，
+    // 再向东 2m 用 mapline 定一次方向，标定就成立——不再需要 4 个停点。
+    // 理论依据：alpha 就是把里程计局部系转到地图系的转角，它恒等于参考姿态的
+    // refYaw；残差只来自"取零位时的朝向偏差"（现场把狗摆正朝东即消除）。
+    void setCalibFromMap(double k, double alphaRad);
+
+    // 任务边界同步：导航开始前 / 任务结束后各调用一次，用最新差分帧一次性吸附
+    // 位置与航向。段内不再跟踪（syncOnlyOnTask=true 时）。
+    void requestSync(const QString &reason);
+    // 由外层每拍喂入导航是否在执行；内部只在"假→真""真→假"的边沿触发 requestSync
+    void setNavActive(bool active);
 
     // 清空观测与标定样本（地图参考被重设时必须调用）
     void reset();
@@ -244,6 +271,10 @@ private:
     qint64 _staticSinceMs = 0;  // 当前静止段的起始时刻
     bool   _staticStill = false;// 已静止足够久（calibStaticHoldMs）
     bool   _staticPointTaken = false; // 本静止段是否已采过锚点
+    QVector<Sample> _stillBuf;  // 静止窗口内待取中值的帧（满 calibStaticAvgFrames 才算一个锚点）
+    bool   _navActive = false;  // 导航是否在执行（由设置节拍喂入，用于判任务边界）
+    bool   _syncPending = false;// 是否有一次"任务同步"等着下一帧生效
+    int    _syncCount = 0;      // 已完成的同步次数（写日志用）
 
     // 差分航向零位 b（会话量，不进 ini）
     double _zeroYawRad = 0.0;   // 参考姿态下的差分原值 yaw（rad，未归一化）

@@ -61,6 +61,9 @@ public:
     // 地图参考变更：融合偏移属旧参考，必须清空；重启判据的里程计基准也一并作废
     void onMapRefReset();
 
+    // 任务边界同步：导航开始/结束时各喂一次，融合只在边沿吸附（段内不跟踪）
+    void setNavActive(bool active);
+
     // 标定持久化路径（rtkcalib_<id>.ini，与 mapcalib 同目录）
     QString calibPath() const;
 

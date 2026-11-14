@@ -46,6 +46,9 @@ TerminalConfig::TerminalConfig()
     , rtkCalibMaxRmsM(0.30)
     , rtkCalibStaticHoldMs(1500)
     , rtkCalibPointGapM(0.35)
+    , rtkCalibStaticAvgFrames(9)
+    , rtkCalibStaticSpreadM(0.25)
+    , rtkSyncOnlyOnTask(true)
     , rtkOffsetTauSec(0.5)
     , rtkHoldMs(2000)
     , rtkYawFromRtk(true)
@@ -281,6 +284,9 @@ bool TerminalConfig::load(const QString &iniPath)
     rtkCalibMaxRmsM  = qBound(0.02, s.value("Rtk/CalibMaxRmsM", 0.30).toDouble(), 1.0);
     rtkCalibStaticHoldMs = qBound(300, s.value("Rtk/CalibStaticHoldMs", 1500).toInt(), 20000);
     rtkCalibPointGapM = qBound(0.05, s.value("Rtk/CalibPointGapM", 0.35).toDouble(), 5.0);
+    rtkCalibStaticAvgFrames = qBound(1, s.value("Rtk/CalibStaticAvgFrames", 9).toInt(), 61);
+    rtkCalibStaticSpreadM = qBound(0.0, s.value("Rtk/CalibStaticSpreadM", 0.25).toDouble(), 2.0);
+    rtkSyncOnlyOnTask = s.value("Rtk/SyncOnlyOnTask", true).toBool();
     rtkOffsetTauSec  = qBound(0.05, s.value("Rtk/OffsetTauSec", 0.5).toDouble(), 5.0);
     rtkHoldMs        = qBound(200, s.value("Rtk/HoldMs", 2000).toInt(), 30000);
     // 服务端只给位置、航向恒为 0 时置 false：朝向只走里程计 + 位置标定转角

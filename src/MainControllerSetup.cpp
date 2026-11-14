@@ -178,6 +178,9 @@ void MainController::initChannels()
         fp.useRtkYaw       = _cfg.rtkYawFromRtk;
         fp.calibStaticHoldMs = _cfg.rtkCalibStaticHoldMs;
         fp.calibPointGapM  = _cfg.rtkCalibPointGapM;
+        fp.calibStaticAvgFrames = _cfg.rtkCalibStaticAvgFrames;
+        fp.calibStaticSpreadM   = _cfg.rtkCalibStaticSpreadM;
+        fp.syncOnlyOnTask       = _cfg.rtkSyncOnlyOnTask;
         fp.offStaticSpeed  = _cfg.rtkOffStaticSpeed;
         fp.offSlowSpeed    = _cfg.rtkOffSlowSpeed;
         fp.offSlowYawRateDeg = _cfg.rtkOffSlowYawRateDeg;
