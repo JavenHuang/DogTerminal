@@ -101,6 +101,11 @@ void RtkPoseTracker::onFrame(const QByteArray &body)
     // 若地图参考尚未建立（启动初期），本帧只做观测，不建立融合偏移
     if (_map.isActive() && _st.valid)
     {
+        // 地图参考系的 refYaw 交给融合：标定解出的 α 是"差分系→地图系"的旋转，
+        // 其理论值就是 -refYaw 附近。之后 α 的判据变成"相对 refYaw 的残差"，
+        // 不再要求 α 落在 ±5°（否则每次重建参考都把 α 顶到 -90°~-108° 直接被拒）。
+        _fusion.setMapRefYawRad(_map.refYaw(), _map.isActive());
+
         double omx = 0.0;
         double omy = 0.0;
         double omyaw = 0.0;

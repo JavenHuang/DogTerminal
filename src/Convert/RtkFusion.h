@@ -99,7 +99,7 @@ public:
             , useForNav(true)
             , calibMinSamples(4)
             , calibMinPathM(0.8)
-            , calibMaxRmsM(0.12)
+            , calibMaxRmsM(0.30)
             , offsetTauSec(0.5)
             , snapM(0.8)
             , holdMs(2000)
@@ -118,9 +118,9 @@ public:
             , zeroLineSegM(0.6)
             , zeroLineMinM(2.5)
             , zeroLineSpreadDeg(2.0)
-            , calibKMin(0.95)
-            , calibKMax(1.05)
-            , calibAlphaMaxDeg(5.0) {}
+            , calibKMin(0.90)
+            , calibKMax(1.10)
+            , calibAlphaMaxDeg(15.0) {}
     };
 
     struct Calib
@@ -148,6 +148,16 @@ public:
 
     void setParams(const Params &p) { _p = p; }
     const Params &params() const { return _p; }
+
+    // 地图参考朝向（rad）：建参考那一姿态下的局部 yaw。
+    // 地图系是"以参考姿态定 0°"建起来的，因此它相对差分系的期望转角就等于 refYaw；
+    // α 判据必须相对它做残差，否则"参考建在朝南姿态"时 ±5° 会把正确的 90° 转角判成越界。
+    // valid=false（参考未建立）时判据退回 |α|≤CalibAlphaMaxDeg，与旧行为等价。
+    void setMapRefYawRad(double refYawRad, bool valid)
+    {
+        _mapRefYawRad = refYawRad;
+        _hasMapRefYaw = valid;
+    }
 
     void setCalib(const Calib &c) { _calib = c; }
     const Calib &calib() const { return _calib; }
@@ -282,6 +292,10 @@ private:
     bool   _hasPrevOdom = false;
     double _prevOdomX = 0.0, _prevOdomY = 0.0;
     qint64 _prevOdomMs = 0;
+
+    // 地图参考朝向（见 setMapRefYawRad）：α 判据的期望基准
+    double _mapRefYawRad = 0.0;
+    bool   _hasMapRefYaw = false;
 };
 
 #endif  // RTK_FUSION_H

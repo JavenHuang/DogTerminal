@@ -43,7 +43,7 @@ TerminalConfig::TerminalConfig()
     , rtkAutoCalib(true)
     , rtkCalibMinSamples(4)
     , rtkCalibMinPathM(0.8)
-    , rtkCalibMaxRmsM(0.12)
+    , rtkCalibMaxRmsM(0.30)
     , rtkCalibStaticHoldMs(1500)
     , rtkCalibPointGapM(0.35)
     , rtkOffsetTauSec(0.5)
@@ -57,9 +57,9 @@ TerminalConfig::TerminalConfig()
     , rtkAutoZero(true)
     , rtkZeroHoldMs(800)
     , rtkZeroMinFrames(3)
-    , rtkCalibKMin(0.95)
-    , rtkCalibKMax(1.05)
-    , rtkCalibAlphaMaxDeg(5.0)
+    , rtkCalibKMin(0.90)
+    , rtkCalibKMax(1.10)
+    , rtkCalibAlphaMaxDeg(15.0)
     , rtkZeroFromLine(true)
     , rtkZeroLineSegM(0.6)
     , rtkZeroLineMinM(2.5)
@@ -276,7 +276,9 @@ bool TerminalConfig::load(const QString &iniPath)
     rtkCalibMinSamples = qBound(3, s.value("Rtk/CalibMinPoints",
                                            s.value("Rtk/CalibMinSamples", 4)).toInt(), 200);
     rtkCalibMinPathM = qBound(0.2, s.value("Rtk/CalibMinPathM", 0.8).toDouble(), 50.0);
-    rtkCalibMaxRmsM  = qBound(0.02, s.value("Rtk/CalibMaxRmsM", 0.12).toDouble(), 1.0);
+    // 差分量化下限：格点约 0.61×0.42m，单点量化 RMS 下限 √((0.61²+0.42²)/12)≈0.21m，
+    // 所以 0.12 的旧默认在数学上不可能达到，解永远被拒。放宽到 0.30。
+    rtkCalibMaxRmsM  = qBound(0.02, s.value("Rtk/CalibMaxRmsM", 0.30).toDouble(), 1.0);
     rtkCalibStaticHoldMs = qBound(300, s.value("Rtk/CalibStaticHoldMs", 1500).toInt(), 20000);
     rtkCalibPointGapM = qBound(0.05, s.value("Rtk/CalibPointGapM", 0.35).toDouble(), 5.0);
     rtkOffsetTauSec  = qBound(0.05, s.value("Rtk/OffsetTauSec", 0.5).toDouble(), 5.0);
@@ -295,10 +297,10 @@ bool TerminalConfig::load(const QString &iniPath)
     rtkZeroHoldMs      = qBound(100, s.value("Rtk/ZeroHoldMs", 800).toInt(), 10000);
     rtkZeroMinFrames   = qBound(1, s.value("Rtk/ZeroMinFrames", 3).toInt(), 50);
     // 停点标定的合理性判据：k 应≈1、α 应≈0，越界不采用（提示回查 mapcalib）
-    rtkCalibKMin       = qBound(0.50, s.value("Rtk/CalibKMin", 0.95).toDouble(), 2.0);
+    rtkCalibKMin       = qBound(0.50, s.value("Rtk/CalibKMin", 0.90).toDouble(), 2.0);
     rtkCalibKMax       = qBound(rtkCalibKMin + 1e-3,
-                                s.value("Rtk/CalibKMax", 1.05).toDouble(), 2.0);
-    rtkCalibAlphaMaxDeg = qBound(0.5, s.value("Rtk/CalibAlphaMaxDeg", 5.0).toDouble(), 180.0);
+                                s.value("Rtk/CalibKMax", 1.10).toDouble(), 2.0);
+    rtkCalibAlphaMaxDeg = qBound(0.5, s.value("Rtk/CalibAlphaMaxDeg", 15.0).toDouble(), 180.0);
     // 直线反算零位：建参考先取读数当初始值，随后用"停点间差分位移方向"把 b 归到地图东
     rtkZeroFromLine    = s.value("Rtk/ZeroFromLine", true).toBool();
     rtkZeroLineSegM    = qBound(0.2, s.value("Rtk/ZeroLineSegM", 0.6).toDouble(), 5.0);

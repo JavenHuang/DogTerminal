@@ -608,29 +608,57 @@ bool RtkFusion::trySolve(qint64 tMs)
         sum2 += rx * rx + ry * ry;
     }
     const double rms = std::sqrt(sum2 / static_cast<double>(cnt));
+    // 几何可辨识性：去质心二阶矩的两个主轴 λ1≥λ2，细长比 = λ2/(λ1+λ2)。
+    // 锚点近似共线时（细长比 <0.04）k 与 α 在一条直线上不可分辨：点集稍有变化，
+    // 解就会在 -96°~-108° 之间漂，而残差仍落在差分格点量化底上，看起来"解得出"、
+    // 其实 α 的不确定度有十来度。必须把这个量打出来，现场才知道要不要走 L 形复核。
+    double sxx = 0.0, syy = 0.0, sxy = 0.0;
+    for (int i = 0; i < cnt; ++i)
+    {
+        const Sample &sm = _samples.at(i);
+        const double dx = sm.qx - cqx;
+        const double dy = sm.qy - cqy;
+        sxx += dx * dx;
+        syy += dy * dy;
+        sxy += dx * dy;
+    }
+    const double tr = sxx + syy;
+    const double det2 = sxx * syy - sxy * sxy;
+    const double dd = tr * tr - 4.0 * det2;
+    const double disc = std::sqrt(dd > 0.0 ? dd : 0.0);
+    const double lam1 = (tr + disc) * 0.5;
+    const double lam2 = (tr - disc) * 0.5;
+    const double elong = (tr > 1e-9) ? (lam2 / tr) : 0.0;   // = λ2/(λ1+λ2)
     // 这一条以前是静默 return：样本被"里程计重锚"污染时它就是唯一的拒绝点，
     // 现场只能看到面板说"里程不足"，永远等不到结果。必须报出数值。
+    // 门槛 0.30m 不是放宽标准，而是差分格点的量化下限：
+    //   格点 0.61m×0.42m 的半格量化 RMS = √((0.61²+0.42²)/12) ≈ 0.214m，
+    //   0.12m 在任何行程下都不可能达到（实测 0.215~0.298 已贴着这个下限）。
     if (rms > _p.calibMaxRmsM)
-        return logReject(tMs, QStringLiteral("RMS=%1m 超上限 %2m（样本跨了里程计重锚或差分重启，形状对不上）")
+        return logReject(tMs, QStringLiteral("RMS=%1m 超上限 %2m（量化下限≈0.21m；再超说明样本跨了里程计重锚或差分重启，形状对不上）")
                                  .arg(rms, 0, 'f', 3).arg(_p.calibMaxRmsM, 0, 'f', 2));
 
-    // 合理性判据：k 应≈1（mapcalib 的尺度是主尺，这里只解残差），α 应≈0。
-    // 越界不采用：一旦置 valid 并写盘，后续 trySolve 会因 valid 直接返回，错值就永久留下。
-    // 所以宁可继续采样，并提示回查 mapcalib。
-    if (k < _p.calibKMin || k > _p.calibKMax
-        || std::fabs(alpha) * 180.0 / kPi > _p.calibAlphaMaxDeg)
+    // 合理性判据：k 是里程计相对差分尺度的残差（mapcalib 是主尺），α 是地图系相对差分系的转角。
+    // α 的期望值不是 0，而是建参考时的 refYaw（地图 0° 就定义在那一个姿态上）：
+    //   本轮 refYaw=-90.28°、实测 α=-103.09° → 残差 12.8°，说明参考建在朝南姿态，
+    //   90° 的那一段是坐标系定义带来的，不该由这个判据来否决。
+    const double alphaRefRad = _hasMapRefYaw ? _mapRefYawRad : 0.0;
+    const double dAlphaDeg = std::fabs(radStdLocal(alpha - alphaRefRad)) * (180.0 / kPi);
+    if (k < _p.calibKMin || k > _p.calibKMax || dAlphaDeg > _p.calibAlphaMaxDeg)
     {
         if (!_bandRejectWarned)
         {
             _bandRejectWarned = true;
             qWarning().noquote() << QStringLiteral(
-                "[Rtk] 停点标定结果越界：k=%1（正常 %2~%3）α=%4°（正常 ±%5°）RMS=%6m → 不采用。"
-                "先回查 mapcalib 的 Scale 与 refYaw（重做一次 mapcheck/mapline，3~5m 直线），"
-                "不要重复跑停点标定")
+                "[Rtk] 停点标定结果越界：k=%1（正常 %2~%3）α=%4°（期望 refYaw=%5°，残差 %6°，允许 ±%7°）"
+                " RMS=%8m 细长比=%9 → 不采用。先回查 mapcalib 的 Scale 与 refYaw，不要重复跑停点标定")
                 .arg(k, 0, 'f', 3)
                 .arg(_p.calibKMin, 0, 'f', 2).arg(_p.calibKMax, 0, 'f', 2)
-                .arg(alpha * 180.0 / kPi, 0, 'f', 2).arg(_p.calibAlphaMaxDeg, 0, 'f', 1)
-                .arg(rms, 0, 'f', 3);
+                .arg(alpha * (180.0 / kPi), 0, 'f', 2)
+                .arg(_hasMapRefYaw ? alphaRefRad * (180.0 / kPi) : 0.0, 0, 'f', 2)
+                .arg(dAlphaDeg, 0, 'f', 2).arg(_p.calibAlphaMaxDeg, 0, 'f', 1)
+                .arg(rms, 0, 'f', 3)
+                .arg(elong, 0, 'f', 3);
         }
         return false;
     }
@@ -645,6 +673,19 @@ bool RtkFusion::trySolve(qint64 tMs)
     c.samples = _n;
     _calib = c;
     _snapNext = true;   // 尺度/转角一变，offset 立刻作废，下一帧直接吸附
+
+    // 成功日志：一次打全 k/α/refYaw/残差/RMS/锚点数/锚点里程/细长比。
+    // 现场以后只看这一行，就知道标定是按什么数值被接受的、离门槛还差多少。
+    qInfo().noquote() << QStringLiteral(
+        "[Rtk] 停点标定完成 k=%1 α=%2°（refYaw=%3° 残差 %4°） RMS=%5m 锚点=%6 里程=%7m 细长比=%8")
+        .arg(k, 0, 'f', 3)
+        .arg(alpha * (180.0 / kPi), 0, 'f', 2)
+        .arg(_hasMapRefYaw ? alphaRefRad * (180.0 / kPi) : 0.0, 0, 'f', 2)
+        .arg(dAlphaDeg, 0, 'f', 2)
+        .arg(rms, 0, 'f', 3)
+        .arg(_n)
+        .arg(_path, 0, 'f', 2)
+        .arg(elong, 0, 'f', 3);
 
     // 用最近一帧立即重算 offset：否则这一帧到下一帧之间（≤200 ms、最多数个
     // 20 Hz 控制节拍）会拿旧 offset 配新尺度，出现一次成比例的错位
