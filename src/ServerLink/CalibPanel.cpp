@@ -181,7 +181,7 @@ CalibPanel::Verdict CalibPanel::judge(const Snapshot &s) const
         else if (s.pathM < s.calibMinPathM)
         {
             v.code = QStringLiteral("KEEP_PATH");
-            v.head = QStringLiteral("标定未解：点数够、直线里程不足 %1/%2m")
+            v.head = QStringLiteral("标定未解：点数够、锚点累计里程不足 %1/%2m")
                          .arg(s.pathM, 0, 'f', 2).arg(s.calibMinPathM, 0, 'f', 2);
             v.action = QStringLiteral("沿正东再走 %1m，并把停点拉开（点间距 ≥1m，走直、中途别纠偏）")
                            .arg(s.calibMinPathM - s.pathM, 0, 'f', 2);
@@ -190,7 +190,9 @@ CalibPanel::Verdict CalibPanel::judge(const Snapshot &s) const
         {
             v.code = QStringLiteral("SOLVE_FAIL");
             v.head = QStringLiteral("样本够了但 k/α 未解出（残差或散布超限被拒）");
-            v.action = QStringLiteral("沿正东重走 3~5m 直线：走直、中途别纠偏、停点拉大，再让它解一次");
+            v.action = QStringLiteral("看控制台最新一条「[Rtk] 停点标定暂不可解」的括号原因；"
+                                      "若写 RMS 超限或形状对不上，说明这轮锚点跨了里程计重锚："
+                                      "换一段连续行走重新停点，别在遥控接管后接着用旧锚点");
         }
     }
     else if (s.rmsM > s.calibMaxRmsM)

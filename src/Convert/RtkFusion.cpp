@@ -57,6 +57,11 @@ void RtkFusion::reset()
     _driftSum = 0.0;
     _driftCount = 0;
     _driftWarned = false;
+    _hasPrevOdom = false;
+    _prevOdomX = 0.0;
+    _prevOdomY = 0.0;
+    _prevOdomMs = 0;
+    _lastRejectLogMs = 0;
     _staticSinceMs = 0;
     _staticStill = false;
     _staticPointTaken = false;
@@ -176,6 +181,36 @@ void RtkFusion::onRtkFrame(double rtkX, double rtkY, double rtkYaw,
     _lastOdomYaw = odomYaw;
     _hasLastFrame = true;
 
+    // ---- 里程计坐标系重锚检测：标定样本必须全部来自同一套里程计系 ----
+    // 遥控接管、狗端 SLAM 重定位都会让 odom 在一个帧间隔里整块平移（实测 3~5m，
+    // 狗本身不可能在 0.2s 内走那么多）。这之后采的锚点与之前的不在同一坐标系，
+    // 混进同一次相似变换拟合必然发散：RMS 远超上限就被静默拒绝，
+    // 面板还会错报"里程不足 0.00m"，把人引向"再多走点"，走多少都没用。
+    // 所以这里把"坐标系变了"这件事当场识别出来：清掉旧样本、保留 k/α 与零位 b。
+    if (_hasPrevOdom)
+    {
+        const double odStep = std::sqrt((odomX - _prevOdomX) * (odomX - _prevOdomX)
+                                        + (odomY - _prevOdomY) * (odomY - _prevOdomY));
+        const double dtSec = static_cast<double>(tMs - _prevOdomMs) / 1000.0;
+        // 这一段里"狗真的走了这么远"的上限：按当前速度外推再留 0.5m 余量。
+        // 断链后差分帧可能隔好几秒才来，固定 2m 门限会把正常行走误判成重锚，
+        // 所以门限必须跟着时间间隔长。
+        const double legit = _lastSpeed * dtSec + 0.5;
+        if (odStep > qMax(2.0, legit))
+        {
+            qWarning().noquote() << QStringLiteral(
+                "[Rtk] 里程计坐标系重锚 %1m/%2ms：旧标定样本作废（k/α 与零位 b 保留），"
+                "从当前位置重新收锚点")
+                .arg(odStep, 0, 'f', 2).arg(tMs - _prevOdomMs);
+            clearSamples();             // _path/_n/_samples 清零；_bandRejectWarned 重臂
+            _staticPointTaken = false;  // 当前位置立刻允许再采一个锚点
+            _snapNext = true;           // 里程计整块平移过，offset 必须重新吸附
+        }
+    }
+    _prevOdomX = odomX;
+    _prevOdomY = odomY;
+    _prevOdomMs = tMs;
+    _hasPrevOdom = true;
     // 里程计 -> 绝对(差分)系：只做尺度与转角，平移交给 offset 动态吸收。
     // 方向必须是"里程计映射到差分"，而不是反过来：差分的米才是地图上真实的米，
     // 反过来把差分压进里程计尺度，会把 mapcalib 的残余尺度误差带进最终位姿。
@@ -510,6 +545,20 @@ void RtkFusion::onRtkFrame(double rtkX, double rtkY, double rtkYaw,
     _lastSrc = SrcRtk;
 }
 
+bool RtkFusion::logReject(qint64 tMs, const QString &why)
+{
+    if (_lastRejectLogMs == 0 || tMs - _lastRejectLogMs >= 3000)
+    {
+        _lastRejectLogMs = tMs;
+        qInfo().noquote() << QStringLiteral(
+            "[Rtk] 停点标定暂不可解（%1）：锚点 %2/%3 里程 %4/%5m 样本 %6")
+            .arg(why).arg(_n).arg(_p.calibMinSamples)
+            .arg(_path, 0, 'f', 2).arg(_p.calibMinPathM, 0, 'f', 2)
+            .arg(_samples.size());
+    }
+    return false;
+}
+
 bool RtkFusion::trySolve(qint64 tMs)
 {
     if (!_p.autoCalib || _calib.valid)
@@ -517,7 +566,7 @@ bool RtkFusion::trySolve(qint64 tMs)
     if (_zeroPending)
         return false;   // 零位未落定前，样本的 dyaw 带随机角，解出来的一致性无法判断
     if (_n < _p.calibMinSamples || _path < _p.calibMinPathM)
-        return false;
+        return logReject(tMs, QStringLiteral("锚点数或锚点里程不够"));
     if (_lastSolveMs > 0 && tMs - _lastSolveMs < 500)
         return false;
     _lastSolveMs = tMs;
@@ -532,7 +581,7 @@ bool RtkFusion::trySolve(qint64 tMs)
     const double sigma = _sqq - (_sqx * _sqx + _sqy * _sqy) / n;
     // 静点太集中（狗在同一个地方反复停）时几何退化，k 与 α 不可辨
     if (sigma < 1e-3)
-        return false;
+        return logReject(tMs, QStringLiteral("锚点太集中（σ<1e-3），几何退化"));
 
     const double a = _spxqx + _spyqy - (_spx * _sqx + _spy * _sqy) / n;
     const double b = _spyqx - _spxqy - (_spy * _sqx - _spx * _sqy) / n;
@@ -540,7 +589,7 @@ bool RtkFusion::trySolve(qint64 tMs)
     const double k = std::sqrt(a * a + b * b) / sigma;
     const double alpha = std::atan2(b, a);
     if (k < 0.5 || k > 2.0)
-        return false;
+        return logReject(tMs, QStringLiteral("k=%1 越界(0.5~2.0)").arg(k, 0, 'f', 3));
 
     // 残差 RMS：平移取质心对质心（自由），只衡量形状一致程度
     const double cc = std::cos(alpha);
@@ -550,7 +599,7 @@ bool RtkFusion::trySolve(qint64 tMs)
     double sum2 = 0.0;
     const int cnt = _samples.isEmpty() ? 0 : _samples.size();
     if (cnt <= 0)
-        return false;
+        return logReject(tMs, QStringLiteral("无样本"));
     for (int i = 0; i < cnt; ++i)
     {
         const Sample &sm = _samples.at(i);
@@ -559,8 +608,11 @@ bool RtkFusion::trySolve(qint64 tMs)
         sum2 += rx * rx + ry * ry;
     }
     const double rms = std::sqrt(sum2 / static_cast<double>(cnt));
+    // 这一条以前是静默 return：样本被"里程计重锚"污染时它就是唯一的拒绝点，
+    // 现场只能看到面板说"里程不足"，永远等不到结果。必须报出数值。
     if (rms > _p.calibMaxRmsM)
-        return false;
+        return logReject(tMs, QStringLiteral("RMS=%1m 超上限 %2m（样本跨了里程计重锚或差分重启，形状对不上）")
+                                 .arg(rms, 0, 'f', 3).arg(_p.calibMaxRmsM, 0, 'f', 2));
 
     // 合理性判据：k 应≈1（mapcalib 的尺度是主尺，这里只解残差），α 应≈0。
     // 越界不采用：一旦置 valid 并写盘，后续 trySolve 会因 valid 直接返回，错值就永久留下。

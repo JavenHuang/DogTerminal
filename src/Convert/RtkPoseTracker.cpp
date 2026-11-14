@@ -349,7 +349,10 @@ void RtkPoseTracker::onFrame(const QByteArray &body)
         ps.alphaDeg     = rc.alphaRad * kRadToDeg;
         ps.alphaYawDeg  = rc.alphaYawRad * kRadToDeg;
         ps.rmsM         = rc.rmsM;
-        ps.pathM        = rc.pathM;
+        // 已解时用"解算时用了多少里程"，未解时必须用实时累计里程（pathM()）。
+        // 原来这里恒取 rc.pathM，而未解时它是 0，面板于是显示"里程不足 0.00/0.80m"，
+        // 把"样本污染/RMS 超限"错报成"再多走点"——现场走 26m 也解不出来就是这个坑。
+        ps.pathM        = rc.valid ? rc.pathM : _fusion.pathM();
         ps.anchors      = _fusion.staticPoints();
 
         ps.hasMap       = hasMap;

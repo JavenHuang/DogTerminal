@@ -93,7 +93,10 @@ void YawStabilizer::update(const DogOdom &odom, const DogImu &imu)
     // 导航/速度直控期间不能按"原地慢转"判静止：否则陀螺读数会被当成零偏，
     // 真实的慢速转向会被从 yaw 增量里扣掉，表现为 turnJoy 饱和但朝向几乎不变
     const bool controlActive = _navigator.isActive() || _velCtrlActive;
-    const bool still = !controlActive && odom.valid && (vBody < 0.02)
+    // 速度阈值必须与"静止"的统一口径一致（RtkFusion 的 offStaticSpeed 默认 0.03）。
+    // 原来卡 0.02：四足站立时 vBody 的噪声常年在 0.03 上下，静止判据于是永不成立，
+    // 零偏一辈子学不到（日志里"零偏=0.000°/s"恒 0 就是这个原因），静止锁也永不触发。
+    const bool still = !controlActive && odom.valid && (vBody < 0.05)
                        && (std::fabs(gyroZ) < 0.05);
 
     if (still)
@@ -198,8 +201,16 @@ void YawStabilizer::update(const DogOdom &odom, const DogImu &imu)
                        .arg(dev * kRadToDeg, 0, 'f', 1);
             _yawSuspect = false;
         }
-        // raw 为绝对基准：一致时重锚，抑制陀螺长期漂移
-        _yawGyro = DogProtocol::radStd(raw);
+        // raw 为绝对基准：一致时向 raw 收敛，抑制陀螺长期漂移。
+        // 但不能再"每帧硬重锚到 raw"：那样陀螺积分（含零偏补偿）每帧都被丢掉，
+        // 稳定yaw 退化成 raw 的复读机——日志里"稳定yaw==陀螺yaw==raw yaw"逐帧全等、
+        // 而地图 yaw 仍按 raw 的 0.2~0.3°/s 漂，就是这条造成的。
+        // 小幅差按 10%/帧 收敛（20Hz 下 τ≈0.5s）；超过 5° 才认定 IMU 基准真跳了，直接重锚。
+        const double gapC = DogProtocol::radStd(DogProtocol::radStd(raw) - _yawGyro);
+        if (std::fabs(gapC) > 5.0 / kRadToDeg)
+            _yawGyro = DogProtocol::radStd(raw);
+        else
+            _yawGyro = DogProtocol::radStd(_yawGyro + 0.10 * gapC);
         if (!_staticLocked)
             _yawCorrected = _yawGyro;
         return;

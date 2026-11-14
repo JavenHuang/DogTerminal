@@ -173,6 +173,9 @@ public:
     int  lastSource() const { return _lastSrc; }
     qint64 lastFrameMs() const { return _lastFrameMs; }
     int  staticPoints() const { return _n; }          // 已采到的静止锚点数
+    // 实时累计锚点里程。注意与 calib().pathM 的区别：后者只在解算成功时写入，
+    // 未解时恒 0；面板/诊断必须用这个，否则会显示"里程 0.00m"把人引向"再多走点"。
+    double pathM() const { return _path; }
     bool offsetFrozen() const { return _offFrozen; }  // 当前是否冻结 offset（运动中）
     double lastSpeed() const { return _lastSpeed; }
     double frozenDriftM() const { return (_driftCount > 0) ? (_driftSum / _driftCount) : 0.0; } // 冻结期间差分-融合残差均值 m
@@ -208,6 +211,9 @@ private:
 
     void addSample(const Sample &s, bool isStatic);
     void clearSamples();
+    // 解不出来时把"卡在哪一条判据"打出来（限频 3s），返回 false 以便直连 return。
+    // 历史教训：RMS 超限原本是静默 return，面板又错报成"里程不足"，现场只能靠猜。
+    bool logReject(qint64 tMs, const QString &why);
 
     Params _p;
     Calib  _calib;
@@ -269,6 +275,13 @@ private:
     bool   _hasPrev = false;
     double _prevPx = 0.0, _prevPy = 0.0;
     qint64 _lastSolveMs = 0;
+    qint64 _lastRejectLogMs = 0;   // "暂不可解"日志限频用
+
+    // 里程计坐标系重锚检测：遥控接管/SLAM 重定位会让 odom 单帧整块平移，
+    // 这类跳变之后采的锚点与之前的不在同一坐标系，混进同一次拟合必然发散。
+    bool   _hasPrevOdom = false;
+    double _prevOdomX = 0.0, _prevOdomY = 0.0;
+    qint64 _prevOdomMs = 0;
 };
 
 #endif  // RTK_FUSION_H
