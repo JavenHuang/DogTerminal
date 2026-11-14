@@ -229,10 +229,12 @@ void MainController::beginLineTrace()
 
 void MainController::traceTick(const DogOdom &odom)
 {
-    // 单帧位移超过 0.5m 视为里程计跳变（遥控接管/坐标系重置），不计入路径长度
+    // 单帧位移超过 1.5m 视为里程计跳变（遥控接管/坐标系重置），不计入路径长度。
+    // 旧值 0.5m 太紧：状态包 1Hz、快速行走时单帧步长本身就有 0.5~0.8m，
+    // 会被当成跳变丢掉，路径反而比位移短（直线度打出 75%~79% 的假象）。
     const double step = std::sqrt((odom.position[0] - _traceLastX) * (odom.position[0] - _traceLastX)
                                   + (odom.position[1] - _traceLastY) * (odom.position[1] - _traceLastY));
-    if (step < 0.5)
+    if (step < 1.5)
         _tracePath += step;
     _traceLastX = odom.position[0];
     _traceLastY = odom.position[1];
@@ -255,8 +257,13 @@ void MainController::traceTick(const DogOdom &odom)
         headingDeg = std::atan2(std::sin(a), std::cos(a)) * (180.0 / 3.14159265358979323846);
     }
 
-    // 直线度：路径/位移，1.00 表示完全直线；明显偏离说明走歪，标定会偏
-    const double straight = (disp > 1e-3) ? (_tracePath / disp) : 1.0;
+    // 直线度 = 位移/路径：1.00 表示完全直线，越小越弯。
+    // （反比写法会出现 101%/102%，看着像 bug；路径因包空洞少算时也会虚高，故上钳到 100%）
+    double straight = 1.0;
+    if (_tracePath > 1e-3 && disp > 1e-3)
+        straight = disp / _tracePath;
+    if (straight > 1.0)
+        straight = 1.0;
     const double mapDisp  = disp * _map.scale();
 
     double mapX = 0.0, mapY = 0.0, mapYaw = 0.0;
@@ -273,8 +280,9 @@ void MainController::traceTick(const DogOdom &odom)
                        .arg(mapX, 0, 'f', 2)
                        .arg(mapY, 0, 'f', 2)
                        .arg((t - _traceStartMs) / 1000.0, 0, 'f', 1);
-    if (straight > 1.15)
-        line += QStringLiteral("  ← 走得不直，按这个落点标定会把朝向算歪，建议重走");
+    if (straight < 0.90)
+        line += QStringLiteral("  ← 走得不直（位移/路径 %1%），按这个落点标定会把朝向算歪，建议重走")
+                    .arg(straight * 100.0, 0, 'f', 0);
 
     qWarning().noquote() << line;
 }
@@ -295,7 +303,12 @@ void MainController::endLineTrace(double targetMapX, double targetMapY)
     const double ty = targetMapY - _map.params().originY;
     const double toldDist = std::sqrt(tx * tx + ty * ty);
 
-    const double straight = (odomDist > 1e-3) ? (_tracePath / odomDist) : 1.0;
+    // 直线度同样是 位移/路径（1.00=直，越小越弯），与逐秒行保持同一口径
+    double straight = 1.0;
+    if (_tracePath > 1e-3 && odomDist > 1e-3)
+        straight = odomDist / _tracePath;
+    if (straight > 1.0)
+        straight = 1.0;
 
     QString msg = QStringLiteral("[Line] 收尾: 里程计读数 %1m · 累计路径 %2m · 直线度 %3% "
                                  "· 你报的终点距 %4m")
