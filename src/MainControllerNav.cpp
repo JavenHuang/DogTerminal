@@ -74,6 +74,24 @@ void MainController::onNavFinished(quint32 taskId, DogProtocol::MoveResult resul
     // 只靠到达半径 0.2/0.3m 判定是判不准的。
     // 复核期间若同一任务又收到其它结论（被 stop 取消、补段超时等），以新结论为准：
     // 手上的"到达"结果作废，否则同一 taskId 会先后发出两条互相矛盾的结果
+    // 同一个 taskId 的"到达"会来两次：软到达（2×半径，Navigator 仍 active、狗还在走）
+    // 与硬到达（进入半径，Phase_Idle、已停车）。复核只认"已经停住"的那一次：
+    // 第二次到达只刷新等待窗口，绝不当成"新结论"把窗口作废——否则硬到达几秒后
+    // 到来时复核刚建立就被清空，锚点还没出就直接上报，等于复核没做。
+    if (_avHold && _avTaskId == taskId && result == DogProtocol::MR_ARRIVED)
+    {
+        _avRemain = remainingDist;
+        _avMsg    = message;
+        _avDeadlineMs = nowMs() + _cfg.navArriveWaitMs;
+        qInfo().noquote()
+            << QStringLiteral("[Arrive] task%1 再次到达（%2）：复核窗口重置为 %3ms")
+                   .arg(taskId)
+                   .arg(_navigator->isActive() ? QStringLiteral("软到达，狗仍在走")
+                                               : QStringLiteral("硬到达，已停车"))
+                   .arg(_cfg.navArriveWaitMs);
+        return;
+    }
+
     if (_avHold && _avTaskId == taskId)
     {
         _avHold = false;
@@ -127,19 +145,23 @@ void MainController::maybeFinishArriveVerify(qint64 nowMs)
     if (!newAnchor && !timedOut)
         return;   // 既没新锚点也没超时：继续等（狗刚停稳，锚点要 3.2s 才出）
 
-    double wantMx = 0.0;
-    double wantMy = 0.0;
+    // 目标点与当前位姿都必须先落到"同一套坐标"再相减。
+    //   _navigator->targetLocalX/Y 是局部坐标；_st.x/_st.y 也是局部坐标（MapTransform 之前的值）。
+    //   地图启用时两者都要用同一个 MapTransform 换成地图坐标，否则只要 mapreset 建参考时
+    //   狗不在局部原点，残差就凭空多出"参考点偏移"（数米）→ 复核永远判超范围、永不补段，
+    //   并把假残差写进"剩余距离"。
+    double wantMx = _navigator->targetLocalX();
+    double wantMy = _navigator->targetLocalY();
+    double curMx  = _st.x;
+    double curMy  = _st.y;
     if (_map.isActive())
-        _map.toMap(_navigator->targetLocalX(), _navigator->targetLocalY(), 0.0,
-                   &wantMx, &wantMy, nullptr);
-    else
     {
-        wantMx = _navigator->targetLocalX();
-        wantMy = _navigator->targetLocalY();
+        _map.toMap(wantMx, wantMy, 0.0, &wantMx, &wantMy, nullptr);
+        _map.toMap(curMx, curMy, _st.yaw, &curMx, &curMy, nullptr);
     }
 
-    const double resX = _st.x - wantMx;
-    const double resY = _st.y - wantMy;
+    const double resX = curMx - wantMx;
+    const double resY = curMy - wantMy;
     const double residual = std::sqrt(resX * resX + resY * resY);
 
     // 补一段的条件：残差超门限、还能补、且残差在可修正范围内。

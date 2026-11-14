@@ -113,7 +113,10 @@ void RtkPoseTracker::onFrame(const QByteArray &body)
     // 速度/角速度取终端自己的运动状态（不是差分给的），因为差分不给速度。
     if (_anchor.enabled())
     {
-        const double vNow  = (_st.valid) ? std::fabs(_st.vx) : 1e9;
+        // 只看机体系前向速度 vx 会漏掉"横移/小幅挪动"：侧移时 vx≈0 会被误判成停稳，
+        // 于是拿一帧"正在走"的差分去锚定位姿。取位姿低通过滤速度 _st.speed 与前向速度
+        // 的较大者，横向运动也能拦住。
+        const double vNow  = (_st.valid) ? qMax(std::fabs(_st.vx), _st.speed) : 1e9;
         const double yrNow = (_st.valid) ? _st.yawRate : 1e9;
         _anchor.onFrame(cx, cy, vNow, yrNow, recvMs);
     }
