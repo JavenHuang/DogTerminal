@@ -217,6 +217,11 @@ void MainController::beginLineTrace()
     _traceLastX    = _traceStartX;
     _traceLastY    = _traceStartY;
     _tracePath     = 0.0;
+    _traceAccX     = 0.0;
+    _traceAccY     = 0.0;
+    _traceLastMs   = 0;
+    _traceJumpN    = 0;
+    _traceJumpM    = 0.0;
     _tracePkts     = 0;
     _traceStartMs  = nowMs();
     _tracePrintMs  = 0;
@@ -229,25 +234,50 @@ void MainController::beginLineTrace()
 
 void MainController::traceTick(const DogOdom &odom)
 {
-    // 单帧位移超过 1.5m 视为里程计跳变（遥控接管/坐标系重置），不计入路径长度。
-    // 旧值 0.5m 太紧：状态包 1Hz、快速行走时单帧步长本身就有 0.5~0.8m，
-    // 会被当成跳变丢掉，路径反而比位移短（直线度打出 75%~79% 的假象）。
-    const double step = std::sqrt((odom.position[0] - _traceLastX) * (odom.position[0] - _traceLastX)
-                                  + (odom.position[1] - _traceLastY) * (odom.position[1] - _traceLastY));
-    if (step < 1.5)
+    // 单帧步长按"包间隔 × 实测速度"自适应判定，而不是固定米数：
+    // 狗端状态包实际约 110Hz（日志里 dt 是 8~11ms），但 mapreset 期间真狗单帧
+    // 位移本来只有几十毫米，而狗端 odom 整体跳变一次就是 0.6~3m。
+    // run9 实测：固定 1.5m 门限会把 0.74m / 1.57m 的跳变当成正常步长累加，
+    // 于是 k 被算成 1.445 直接判超限。改用 3×vBody×dt + 0.10m（下限 0.10m）。
+    const double sdx = odom.position[0] - _traceLastX;
+    const double sdy = odom.position[1] - _traceLastY;
+    const double step = std::sqrt(sdx * sdx + sdy * sdy);
+
+    const qint64 tNow = nowMs();
+    const double dtPkt = (_traceLastMs > 0)
+                       ? static_cast<double>(tNow - _traceLastMs) / 1000.0 : 0.0;
+    _traceLastMs = tNow;
+
+    const double vBody = std::sqrt(static_cast<double>(odom.vBody[0]) * odom.vBody[0]
+                                   + static_cast<double>(odom.vBody[1]) * odom.vBody[1]);
+    double allow = 3.0 * vBody * (dtPkt > 0.0 ? dtPkt : 0.05) + 0.10;
+    if (allow < 0.10)
+        allow = 0.10;
+
+    if (step > allow)
+    {
+        // 跳变帧：整帧丢弃，既不计路径也不计位移
+        ++_traceJumpN;
+        _traceJumpM += step;
+    }
+    else
+    {
         _tracePath += step;
+        _traceAccX += sdx;
+        _traceAccY += sdy;
+    }
     _traceLastX = odom.position[0];
     _traceLastY = odom.position[1];
     ++_tracePkts;
 
-    const qint64 t = nowMs();
+    const qint64 t = tNow;
     if (_tracePrintMs != 0 && (t - _tracePrintMs) < 1000)
         return;
     _tracePrintMs = t;
 
-    const double dx = odom.position[0] - _traceStartX;
-    const double dy = odom.position[1] - _traceStartY;
-    const double disp = std::sqrt(dx * dx + dy * dy);
+    const double disp = std::sqrt(_traceAccX * _traceAccX + _traceAccY * _traceAccY);
+    const double dx = _traceAccX;
+    const double dy = _traceAccY;
 
     // 方位角按地图约定换算：0=东、顺时针为正
     double headingDeg = 0.0;
@@ -283,8 +313,24 @@ void MainController::traceTick(const DogOdom &odom)
     if (straight < 0.90)
         line += QStringLiteral("  ← 走得不直（位移/路径 %1%），按这个落点标定会把朝向算歪，建议重走")
                     .arg(straight * 100.0, 0, 'f', 0);
+    if (_traceJumpN > 0)
+        line += QStringLiteral(" · 期间剔除里程计跳变 %1 帧（共 %2m）")
+                    .arg(_traceJumpN)
+                    .arg(_traceJumpM, 0, 'f', 2);
 
     qWarning().noquote() << line;
+}
+
+bool MainController::lineTraceDisplacement(double *vLocalX, double *vLocalY) const
+{
+    if (!_traceActive)
+        return false;
+    const double disp = std::sqrt(_traceAccX * _traceAccX + _traceAccY * _traceAccY);
+    if (disp < 0.20)
+        return false;                      // 走得太少，不能用来定尺度
+    if (vLocalX) *vLocalX = _traceAccX;
+    if (vLocalY) *vLocalY = _traceAccY;
+    return true;
 }
 
 void MainController::endLineTrace(double targetMapX, double targetMapY)
@@ -293,9 +339,10 @@ void MainController::endLineTrace(double targetMapX, double targetMapY)
         return;
     _traceActive = false;
 
-    const DogOdom &odom = _dog->odom();
-    const double dx = odom.position[0] - _traceStartX;
-    const double dy = odom.position[1] - _traceStartY;
+    // 用"跳变免疫的累计位移"，不再用 (终点-起点)：狗端 odom 中途跳 0.6~3m 时，
+    // 后者会把 k 顶到 1.4x 并让标定直接失败。
+    const double dx = _traceAccX;
+    const double dy = _traceAccY;
     const double odomDist = std::sqrt(dx * dx + dy * dy);
 
     // 你报的终点相对地图原点的距离，就是"我以为走了多少米"
@@ -324,6 +371,9 @@ void MainController::endLineTrace(double targetMapX, double targetMapY)
                    .arg(k < 1.0 ? QStringLiteral("偏大") : QStringLiteral("偏小"))
                    .arg(std::fabs(1.0 - k) * 100.0, 0, 'f', 1);
     }
+    if (_traceJumpN > 0)
+        msg += QStringLiteral(" · 已剔除里程计跳变 %1 帧（共 %2m，未计入读数）")
+                   .arg(_traceJumpN).arg(_traceJumpM, 0, 'f', 2);
     qWarning().noquote() << msg;
 }
 

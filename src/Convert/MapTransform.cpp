@@ -48,6 +48,24 @@ bool MapTransform::calibrateLineEx(double localX, double localY,
                                    double targetMapX, double targetMapY,
                                    bool apply, CalibGrade *grade, QString *message)
 {
+    if (!_hasRef)
+    {
+        if (grade)
+            *grade = CalibRejected;
+        if (message)
+            *message = QStringLiteral("尚未建立参考，无法直线标定");
+        return false;
+    }
+    return calibrateLineVD(localX - _refX, localY - _refY,
+                           targetMapX, targetMapY, apply, grade, message);
+}
+
+// 位移矢量版本：lineLen 与方位全部由外部给的干净位移决定，
+// 不再依赖 (当前局部点 - 参考点)——后者会被狗端里程计跳变污染。
+bool MapTransform::calibrateLineVD(double vLocalX, double vLocalY,
+                                   double targetMapX, double targetMapY,
+                                   bool apply, CalibGrade *grade, QString *message)
+{
     if (grade)
         *grade = CalibRejected;
 
@@ -58,8 +76,8 @@ bool MapTransform::calibrateLineEx(double localX, double localY,
         return false;
     }
 
-    const double dx = localX - _refX;
-    const double dy = localY - _refY;
+    const double dx = vLocalX;
+    const double dy = vLocalY;
     const double lineLen = std::sqrt(dx * dx + dy * dy);
     if (lineLen < _params.minLineDist)
     {

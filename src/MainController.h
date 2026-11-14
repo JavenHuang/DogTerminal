@@ -146,6 +146,7 @@ private:
     // 直线标定行程监控（mapreset → mapline 期间，现场看"我到底走了多少米"）
     void beginLineTrace() override;
     void endLineTrace(double targetMapX, double targetMapY) override;
+    bool lineTraceDisplacement(double *vLocalX, double *vLocalY) const override;
 
     // 里程计跳变检测：上一次有效原始位姿（用于识别 odom 坐标系重置）
     bool _lastOdomValid = false;
@@ -173,6 +174,14 @@ private:
     double _traceLastX = 0.0;
     double _traceLastY = 0.0;
     double _tracePath = 0.0;      // 累计路径长度（含左右摆动，用来判断"走不直"）
+    // 跳变免疫的累计位移：每帧只累加"合理步长"，被判定为跳变的帧整帧丢弃。
+    // 狗端 odom 会在行走中整体跳 0.6~3m（run9 实测），若直接用"终点-起点"，
+    // 标定 k 会被跳变污染（实测算出过 1.445）。
+    double _traceAccX = 0.0;
+    double _traceAccY = 0.0;
+    qint64 _traceLastMs = 0;
+    int    _traceJumpN = 0;        // 标定行程中被丢弃的跳变帧数
+    double _traceJumpM = 0.0;      // 被丢弃的跳变累计米数
     qint64 _traceStartMs = 0;
     qint64 _tracePrintMs = 0;
     int _tracePkts = 0;

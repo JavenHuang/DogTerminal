@@ -307,9 +307,21 @@ void CommandRouter::handleMapCalibCmd(const QByteArray &body)
         }
         QString msg;
         MapTransform::CalibGrade grade = MapTransform::CalibRejected;
-        const bool ok = _map.calibrateLineEx(odom.position[0], odom.position[1],
-                                             cmd.targetX, cmd.targetY,
-                                             !checkOnly, &grade, &msg);
+        // 优先用行程监控算出的"干净位移"（已剔除狗端 odom 的整体跳变帧）。
+        // 狗端里程计在行走中会跳 0.6~3m，(当前点-参考点) 会因此被污染，
+        // run9 实测能算出 k=1.445 直接判超限——不是标定算法的问题，是被跳变喂了坏数据。
+        double tvx = 0.0, tvy = 0.0;
+        const bool haveTrace = _host.lineTraceDisplacement(&tvx, &tvy);
+        const bool ok = haveTrace
+            ? _map.calibrateLineVD(tvx, tvy, cmd.targetX, cmd.targetY,
+                                   !checkOnly, &grade, &msg)
+            : _map.calibrateLineEx(odom.position[0], odom.position[1],
+                                   cmd.targetX, cmd.targetY,
+                                   !checkOnly, &grade, &msg);
+        if (haveTrace)
+            qInfo().noquote() << QStringLiteral("[Map] 标定使用行程监控位移 (%1, %2)m，"
+                                                "已剔除跳变帧")
+                                   .arg(tvx, 0, 'f', 2).arg(tvy, 0, 'f', 2);
         // 行程监控收尾：先打印"里程计走了多少 / 你报了多少 / k 偏大偏小"，
         // 再看标定结果，现场一眼能判断这一次该重走还是该采信。
         if (!checkOnly)

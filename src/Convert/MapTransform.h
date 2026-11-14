@@ -122,6 +122,14 @@ public:
                          double targetMapX, double targetMapY,
                          bool apply, CalibGrade *grade, QString *message);
 
+    // 直线标定（直接给"相对参考的位移矢量"，不再从当前局部点反算）。
+    // 用途：狗端里程计会在行走中整体跳变（0.6~3m），补偿虽然保住了地图连续性，
+    // 但 (当前点-参考点) 这个差会被跳变污染，导致 k 算成 1.4x 被判超限。
+    // 现场行程监控已经把跳变帧剔除并按帧累加，直接把那个干净位移传进来即可。
+    bool calibrateLineVD(double vLocalX, double vLocalY,
+                         double targetMapX, double targetMapY,
+                         bool apply, CalibGrade *grade, QString *message);
+
     // 尺度外部加载（标定结果持久化后启动恢复）
     void setScale(double s) { _scale = (s > 1e-6) ? s : 1.0; }
 

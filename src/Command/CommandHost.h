@@ -35,6 +35,12 @@ public:
     // 才能算 k，所以带上 targetMapX/targetMapY。
     virtual void beginLineTrace() = 0;
     virtual void endLineTrace(double targetMapX, double targetMapY) = 0;
+
+    // 行程监控算出的"干净位移矢量"（相对参考点，已剔除里程计跳变帧）。
+    // 直线标定应该用它来算 k 与方位：狗端 odom 在行走中会整体跳 0.6~3m，
+    // (当前局部点 - 参考点) 会被污染，k 会算出 1.4x 之类的假值。
+    // 返回 false 表示当前没有可用的行程数据（未标定或数据不足）。
+    virtual bool lineTraceDisplacement(double *vLocalX, double *vLocalY) const = 0;
 };
 
 #endif  // COMMAND_HOST_H
