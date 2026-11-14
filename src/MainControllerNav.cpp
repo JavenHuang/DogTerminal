@@ -72,15 +72,31 @@ void MainController::onNavFinished(quint32 taskId, DogProtocol::MoveResult resul
     // 的残差，超过门限就补一小段（最多 ArriveMaxFix 段），避免把 0.4m 的落点
     // 误差当成"已到达"上报。差分格点 0.61×0.42m、单点 ±0.2~0.3m，
     // 只靠到达半径 0.2/0.3m 判定是判不准的。
+    // 复核期间若同一任务又收到其它结论（被 stop 取消、补段超时等），以新结论为准：
+    // 手上的"到达"结果作废，否则同一 taskId 会先后发出两条互相矛盾的结果
+    if (_avHold && _avTaskId == taskId)
+    {
+        _avHold = false;
+        _avFixLeft = 0;
+        qWarning().noquote()
+            << QStringLiteral("[Arrive] 复核期间 task%1 收到新结论 result=%2，作废待发布的到达结果")
+                   .arg(taskId).arg(static_cast<int>(result));
+    }
+
     if (_cfg.navArriveVerify && result == DogProtocol::MR_ARRIVED
         && !_avHold && (_avFixLeft > 0 || _avTaskId != taskId))
     {
+        // 补段配额按"任务"计：只有换了 taskId 才重置（必须在覆盖 _avTaskId 之前判定）。
+        // 若每次进入复核都无条件重置，补段完成后重新进入复核就把配额加回满值，
+        // 残差长期落在 0.15~1.5m 的点会无限"补段→复核→再补段"。
+        const bool isNewTask = (_avTaskId != taskId);
         _avHold   = true;
         _avTaskId = taskId;
         _avResult = result;
         _avRemain = remainingDist;
         _avMsg    = message;
-        _avFixLeft = _cfg.navArriveMaxFix;
+        if (isNewTask)
+            _avFixLeft = _cfg.navArriveMaxFix;
         _avAnchorSeq = _anchorSeq;
         _avDeadlineMs = nowMs() + _cfg.navArriveWaitMs;
         qWarning().noquote()
