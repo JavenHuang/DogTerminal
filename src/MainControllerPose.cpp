@@ -172,6 +172,12 @@ void MainController::resetMapReference(double localX, double localY, double loca
 
 void MainController::applyMapCalibToFusion()
 {
+    // 差分已关闭（Rtk/Enabled=false）：整套融合/标定都不参与位姿，地图系的
+    // 原点与朝向由 mapreset/mapline 直接负责，这里什么都不做，避免日志与
+    // rtkcalib 文件里留下无效的"标定取自地图"。
+    if (!_cfg.rtkEnabled)
+        return;
+
     // 地图系是"参考姿态定 0°、以 refYaw 为起始角"建起来的，所以把里程计局部系
     // 转到地图系的转角恒等于 refYaw；尺度就是 mapcalib 估出的 Scale。
     // 这两个量一旦确定，k/α 就不必再从停点里解——现场的 4 点共线、差分跳格
@@ -273,7 +279,7 @@ void MainController::compensateYawReset(const DogOdom &odom)
         return;
     if (vBody > 0.15)
         return;
-    if (!_map.isActive() || !_map.params().jumpCompensate)
+    if (!_map.isActive() || !_map.params().yawJumpCompensate)
         return;
 
     _map.shiftRefYaw(dYawRad);

@@ -46,6 +46,7 @@ public:
         double originY;           // 参考点对应的地图 y m
         bool autoReference;       // 终端启动后首个有效位姿是否自动建立参考
         bool jumpCompensate;      // 里程计坐标系跳变时平移参考，保持地图输出连续
+        bool yawJumpCompensate;   // 狗端局部 yaw 基准整体跳变时平移参考朝向（断链/控制权重置）
         double scaleMin;          // 直线标定尺度下限
         double scaleMax;          // 直线标定尺度上限
         double maxHeadingErrRad;  // 直线标定允许的最大残余朝向误差（精确档）
@@ -58,6 +59,7 @@ public:
             , originY(0.0)
             , autoReference(true)
             , jumpCompensate(false)
+            , yawJumpCompensate(true)
             , scaleMin(0.7)
             , scaleMax(1.3)
             , maxHeadingErrRad(15.0 * 3.14159265358979323846 / 180.0)

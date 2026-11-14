@@ -148,6 +148,7 @@ bool TerminalConfig::load(const QString &iniPath)
     mapParams.originY       = s.value("Map/OriginY", 0.0).toDouble();
     mapParams.autoReference = s.value("Map/AutoReference", true).toBool();
     mapParams.jumpCompensate = s.value("Map/JumpCompensate", false).toBool();
+    mapParams.yawJumpCompensate = s.value("Map/YawJumpCompensate", true).toBool();
     mapParams.scaleMin      = s.value("Map/ScaleMin", 0.7).toDouble();
     mapParams.scaleMax      = s.value("Map/ScaleMax", 1.3).toDouble();
     mapParams.maxHeadingErrRad = s.value("Map/MaxHeadingErrDeg", 15.0).toDouble()

@@ -443,6 +443,8 @@ void RtkPoseTracker::onMapRefReset()
 
 void RtkPoseTracker::setNavActive(bool active)
 {
+    if (!_cfg.rtkEnabled)
+        return;   // 差分关闭时不产生"请求同步/任务同步"日志，也不动融合状态
     _fusion.setNavActive(active);
 }
 

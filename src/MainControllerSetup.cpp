@@ -133,7 +133,15 @@ void MainController::initChannels()
 {
     // ---- 差分/标定状态面板：1Hz 一份固定字段快照发到 MQ，服务端常驻显示 ----
     // 与目标检测一样是只读通道：不进位姿、不进导航、不改任何现有上报。
-    // 不按 rtkEnabled 关掉：差分关着时正好让面板显示"纯里程计基线"，这也是现场要看的结论。
+    // 差分关闭（Rtk/Enabled=false）时不再创建/发布：现场用纯里程计时这条通道
+    // 只会每帧报"差分未启用"，属于噪音。
+    if (!_cfg.rtkEnabled)
+    {
+        qInfo().noquote() << QStringLiteral("[Panel] 差分已关闭（Rtk/Enabled=false）："
+                                           "标定面板不启用、calib.%1 不发布")
+                                 .arg(_cfg.terminalId);
+    }
+    else
     {
         _panel = new CalibPanel(this);
         _rtk->setPanel(_panel);
