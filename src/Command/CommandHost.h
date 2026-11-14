@@ -27,6 +27,14 @@ public:
     // 地图标定（mapreset / mapline）成功后，把 Scale 与 refYaw 直接写给融合，
     // 现场不再依赖"4 个停点解 k/α"。由 Router 在标定成功分支里调用。
     virtual void applyMapCalibToFusion() = 0;
+
+    // 直线标定的行程监控（mapreset 起 → mapline 止）。
+    // 现场标定的动作是"从 00 点向东走 N 米"，但 N 到底是多少只能靠实测：
+    // 终端全程报里程计走了多少米、路径多长、直线度、方位，收尾再把你报的米数
+    // 和里程计读数对比，直接告诉 k 是偏大还是偏小。endLineTrace 需要终点坐标
+    // 才能算 k，所以带上 targetMapX/targetMapY。
+    virtual void beginLineTrace() = 0;
+    virtual void endLineTrace(double targetMapX, double targetMapY) = 0;
 };
 
 #endif  // COMMAND_HOST_H

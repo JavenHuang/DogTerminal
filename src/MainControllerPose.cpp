@@ -112,6 +112,10 @@ void MainController::onDogStateData()
         qInfo().noquote() << "[Map] 参考已建立（终端启动时狗位姿=O点/0°正东）:" << _map.describe();
     }
 
+    // 直线标定行程监控：mapreset → mapline 之间每秒报"走了多少米"
+    if (_traceActive && odom.valid)
+        traceTick(odom);
+
     // 本地状态打印：同时输出原始局部坐标与地图坐标
     _printer->print();
 
@@ -203,6 +207,112 @@ void MainController::resetMapReference(double localX, double localY, double loca
 }
 
 
+
+void MainController::beginLineTrace()
+{
+    const DogOdom &odom = _dog->odom();
+    _traceActive   = true;
+    _traceStartX   = odom.position[0];
+    _traceStartY   = odom.position[1];
+    _traceLastX    = _traceStartX;
+    _traceLastY    = _traceStartY;
+    _tracePath     = 0.0;
+    _tracePkts     = 0;
+    _traceStartMs  = nowMs();
+    _tracePrintMs  = 0;
+
+    // 只在这一小段时间用 warn 打，保证 LogConsole=warn 的现场也能直接看见
+    qWarning().noquote()
+        << QStringLiteral("[Line] 行程监控开始：里程计起点已记忆。现在向东直线走，"
+                          "每秒报一次里程计读数；停稳后发 mapline 1 <你实测的米数> 0");
+}
+
+void MainController::traceTick(const DogOdom &odom)
+{
+    // 单帧位移超过 0.5m 视为里程计跳变（遥控接管/坐标系重置），不计入路径长度
+    const double step = std::sqrt((odom.position[0] - _traceLastX) * (odom.position[0] - _traceLastX)
+                                  + (odom.position[1] - _traceLastY) * (odom.position[1] - _traceLastY));
+    if (step < 0.5)
+        _tracePath += step;
+    _traceLastX = odom.position[0];
+    _traceLastY = odom.position[1];
+    ++_tracePkts;
+
+    const qint64 t = nowMs();
+    if (_tracePrintMs != 0 && (t - _tracePrintMs) < 1000)
+        return;
+    _tracePrintMs = t;
+
+    const double dx = odom.position[0] - _traceStartX;
+    const double dy = odom.position[1] - _traceStartY;
+    const double disp = std::sqrt(dx * dx + dy * dy);
+
+    // 方位角按地图约定换算：0=东、顺时针为正
+    double headingDeg = 0.0;
+    if (disp > 0.05)
+    {
+        const double a = _map.refYaw() - std::atan2(dy, dx);
+        headingDeg = std::atan2(std::sin(a), std::cos(a)) * (180.0 / 3.14159265358979323846);
+    }
+
+    // 直线度：路径/位移，1.00 表示完全直线；明显偏离说明走歪，标定会偏
+    const double straight = (disp > 1e-3) ? (_tracePath / disp) : 1.0;
+    const double mapDisp  = disp * _map.scale();
+
+    double mapX = 0.0, mapY = 0.0, mapYaw = 0.0;
+    _map.toMap(odom.position[0], odom.position[1], _yaw->yaw(), &mapX, &mapY, &mapYaw);
+
+    QString line = QStringLiteral("[Line] 里程计行程 %1m · 路径 %2m · 直线度 %3% · 方位 %4° "
+                                  "· 地图位移 %5m（k=%6）· 地图(%7, %8) · 用时 %9s")
+                       .arg(disp, 0, 'f', 2)
+                       .arg(_tracePath, 0, 'f', 2)
+                       .arg(straight * 100.0, 0, 'f', 0)
+                       .arg(headingDeg, 0, 'f', 1)
+                       .arg(mapDisp, 0, 'f', 2)
+                       .arg(_map.scale(), 0, 'f', 3)
+                       .arg(mapX, 0, 'f', 2)
+                       .arg(mapY, 0, 'f', 2)
+                       .arg((t - _traceStartMs) / 1000.0, 0, 'f', 1);
+    if (straight > 1.15)
+        line += QStringLiteral("  ← 走得不直，按这个落点标定会把朝向算歪，建议重走");
+
+    qWarning().noquote() << line;
+}
+
+void MainController::endLineTrace(double targetMapX, double targetMapY)
+{
+    if (!_traceActive)
+        return;
+    _traceActive = false;
+
+    const DogOdom &odom = _dog->odom();
+    const double dx = odom.position[0] - _traceStartX;
+    const double dy = odom.position[1] - _traceStartY;
+    const double odomDist = std::sqrt(dx * dx + dy * dy);
+
+    // 你报的终点相对地图原点的距离，就是"我以为走了多少米"
+    const double tx = targetMapX - _map.params().originX;
+    const double ty = targetMapY - _map.params().originY;
+    const double toldDist = std::sqrt(tx * tx + ty * ty);
+
+    const double straight = (odomDist > 1e-3) ? (_tracePath / odomDist) : 1.0;
+
+    QString msg = QStringLiteral("[Line] 收尾: 里程计读数 %1m · 累计路径 %2m · 直线度 %3% "
+                                 "· 你报的终点距 %4m")
+                      .arg(odomDist, 0, 'f', 2)
+                      .arg(_tracePath, 0, 'f', 2)
+                      .arg(straight * 100.0, 0, 'f', 0)
+                      .arg(toldDist, 0, 'f', 2);
+    if (odomDist > 0.2 && toldDist > 0.2)
+    {
+        const double k = toldDist / odomDist;
+        msg += QStringLiteral(" · 尺度 k=%1（里程计%2 %3%）")
+                   .arg(k, 0, 'f', 3)
+                   .arg(k < 1.0 ? QStringLiteral("偏大") : QStringLiteral("偏小"))
+                   .arg(std::fabs(1.0 - k) * 100.0, 0, 'f', 1);
+    }
+    qWarning().noquote() << msg;
+}
 
 void MainController::applyMapCalibToFusion()
 {

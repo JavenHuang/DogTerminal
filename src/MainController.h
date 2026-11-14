@@ -143,6 +143,9 @@ private:
     void resetMapReference(double localX, double localY, double localYaw) override;
     // 地图标定结果 → 融合标定（现场"只标方向、不打 4 个停点"的入口）
     void applyMapCalibToFusion() override;
+    // 直线标定行程监控（mapreset → mapline 期间，现场看"我到底走了多少米"）
+    void beginLineTrace() override;
+    void endLineTrace(double targetMapX, double targetMapY) override;
 
     // 里程计跳变检测：上一次有效原始位姿（用于识别 odom 坐标系重置）
     bool _lastOdomValid = false;
@@ -161,6 +164,20 @@ private:
     int _linkRxCount = 0;
     int _linkHoleCount = 0;
     int _linkMaxGapMs = 0;
+
+    // 直线标定行程监控：mapreset 记起点，之后每秒报"里程计走了多少米"，
+    // mapline 落点跟你实测的米数对比，直接给出 k 偏大/偏小。
+    bool _traceActive = false;
+    double _traceStartX = 0.0;
+    double _traceStartY = 0.0;
+    double _traceLastX = 0.0;
+    double _traceLastY = 0.0;
+    double _tracePath = 0.0;      // 累计路径长度（含左右摆动，用来判断"走不直"）
+    qint64 _traceStartMs = 0;
+    qint64 _tracePrintMs = 0;
+    int _tracePkts = 0;
+    // 每次有效状态包调用：累计路径 + 1s 一行行程打印
+    void traceTick(const DogOdom &odom);
 
 };
 

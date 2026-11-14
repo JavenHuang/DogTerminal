@@ -270,6 +270,8 @@ void CommandRouter::handleMapCalibCmd(const QByteArray &body)
         }
         _host.resetMapReference(odom.position[0], odom.position[1], _yaw.yaw());
         qInfo().noquote() << "[Map] 参考已重建（当前点=O点 朝向=0°正东）:" << _map.describe();
+        // 从这里开始进入"走一段、标一次"的行程监控，直到 mapline/MAPCHECK 收尾
+        _host.beginLineTrace();
         // 参考一建好就有一份可用标定：k=尺度、α=refYaw。之后靠近距离 mapline 定方向即可。
         _host.applyMapCalibToFusion();
         _report.publishFeedback(cmd.taskId, DogProtocol::MR_ACCEPTED,
@@ -308,6 +310,10 @@ void CommandRouter::handleMapCalibCmd(const QByteArray &body)
         const bool ok = _map.calibrateLineEx(odom.position[0], odom.position[1],
                                              cmd.targetX, cmd.targetY,
                                              !checkOnly, &grade, &msg);
+        // 行程监控收尾：先打印"里程计走了多少 / 你报了多少 / k 偏大偏小"，
+        // 再看标定结果，现场一眼能判断这一次该重走还是该采信。
+        if (!checkOnly)
+            _host.endLineTrace(cmd.targetX, cmd.targetY);
         if (ok)
         {
             if (checkOnly)
