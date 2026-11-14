@@ -292,7 +292,9 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
                                     int frames, double spread)
 {
     ++_rkAnchorN;
-    ++_anchorSeq;   // 到点复核靠这个序号判"新锚点真的到了"
+    // _anchorSeq 只记"真正用差分结算过一次"的锚点（修正或复核通过），
+    // 因为到点复核拿它判"锚点已生效"。基准建立那次只是记一个基准、不改位姿，
+    // 若也自增，复核会在没有任何修正的情况下直接宣布"锚点已生效"并上报残差。
 
     if (!_rkBaseValid)
     {
@@ -433,9 +435,9 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
     {
         double lx = 0.0;
         double ly = 0.0;
-        double lyaw = 0.0;
-        _map.toLocal(tx, ty, 0.0, &lx, &ly, &lyaw);
+        _map.toLocal(tx, ty, 0.0, &lx, &ly, nullptr);
         _dr.reset(lx, ly);
+        ++_anchorSeq;   // 真发生了一次差分修正 → 到点复核可以据此结算
         qWarning().noquote()
             << QStringLiteral("[Anchor] 锚定修正 %1m：地图(%2, %3) → (%4, %5)"
                               "（差分(%6, %7) · 本段%8m · 窗口%9帧 · 散布%10m · 第%11次锚点）")
@@ -449,8 +451,11 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
     }
     else
     {
-        // 校正量小于阈值时不即位姿：差分输出量化在 0.61×0.42m 格点上，
+        // 矫正量小于阈值时不即位姿：差分输出量化在 0.61×0.42m 格点上，
         // 同一格内重复采样是恒定值（日志实测连续 67 帧不变），跟着改只会来回蹭。
+        // 但这一步"差分已核对过一次、结论是不必修正"，对到点复核同样算一次有效
+        // 结算（否则残差已经很小也要白等到超时）。
+        ++_anchorSeq;
         qInfo().noquote()
             << QStringLiteral("[Anchor] 复核通过：残差 %1m < 阈值 %2m，不修正"
                               "（差分(%3, %4) · 本段%5m · 窗口%6帧 · 第%7次锚点）")
