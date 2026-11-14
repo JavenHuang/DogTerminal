@@ -61,6 +61,40 @@ void MainController::onDogStateData()
     const DogOdom &odom = _dog->odom();
     const DogImu &imu = _dog->imu();
 
+    // ---- 链路体检：每 10s 一行，现场不用翻上万行日志 ----
+    // 收包数≈10 说明狗端 1Hz 推送正常；空洞数多、最长间隔 3~5s，说明
+    // "狗→终端"这一方向在成串丢包（与 MQ 无关，需要查 192.168.168.x 这段）。
+    {
+        const qint64 t = nowMs();
+        if (_linkLastRxMs > 0)
+        {
+            const qint64 gap = t - _linkLastRxMs;
+            if (gap > 2000)
+            {
+                ++_linkHoleCount;
+                if (gap > _linkMaxGapMs)
+                    _linkMaxGapMs = static_cast<int>(gap);
+            }
+        }
+        _linkLastRxMs = t;
+        ++_linkRxCount;
+        if (_linkReportMs == 0)
+            _linkReportMs = t;
+        else if (t - _linkReportMs >= 10000)
+        {
+            qInfo().noquote()
+                << QStringLiteral("[Link] 10s 体检: 收包 %1 帧 · 空洞(>2s) %2 次 · 最长间隔 %3ms"
+                                  " | 连接=%4 控制权=%5")
+                       .arg(_linkRxCount).arg(_linkHoleCount).arg(_linkMaxGapMs)
+                       .arg(_dog->isConnected() ? QStringLiteral("是") : QStringLiteral("否"))
+                       .arg(_controlAcquired ? QStringLiteral("有") : QStringLiteral("无"));
+            _linkRxCount = 0;
+            _linkHoleCount = 0;
+            _linkMaxGapMs = 0;
+            _linkReportMs = t;
+        }
+    }
+
     // 先做里程计跳变补偿，保证后续参考建立/坐标变换使用的局部位置连续
     compensateOdomJump(odom);
     // yaw 稳定化：之后所有导航/地图/上报统一用 _yaw->yaw()，不再直接用 imu.rpy[2]

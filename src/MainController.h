@@ -155,6 +155,13 @@ private:
     bool   _lastYawValid = false;
     qint64 _lastNavDiagMs = 0;    // 导航闭环阻断诊断打印节流
 
+    // 链路体检（10s 一行）：用于区分"狗端不推"与"网络成串丢包"
+    qint64 _linkLastRxMs = 0;
+    qint64 _linkReportMs = 0;
+    int _linkRxCount = 0;
+    int _linkHoleCount = 0;
+    int _linkMaxGapMs = 0;
+
 };
 
 #endif  // MAIN_CONTROLLER_H
