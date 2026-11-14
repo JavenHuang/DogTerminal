@@ -245,6 +245,13 @@ bool TerminalConfig::load(const QString &iniPath)
     navParams.ppLookaheadMin = s.value("Nav/PpLookaheadMin", 0.6).toDouble();
     navParams.ppLookaheadMax = s.value("Nav/PpLookaheadMax", 1.5).toDouble();
     navParams.ppLookaheadK   = s.value("Nav/PpLookaheadK", 0.5).toDouble();
+    // 原地空转脱困（Pure Pursuit 专用）：检测到"在转但在走"却没有实际位移时，
+    // 前进量归零、先原地把朝向拧过来，避免原地画圈
+    navParams.ppStuckSec     = s.value("Nav/PpStuckSec", 4.0).toDouble();
+    navParams.ppStuckTurnMin = s.value("Nav/PpStuckTurnMin", 0.30).toDouble();
+    navParams.ppStuckFwdMin  = s.value("Nav/PpStuckFwdMin", 0.25).toDouble();
+    navParams.ppStuckVxMax   = s.value("Nav/PpStuckVxMax", 0.08).toDouble();
+    navParams.ppStuckExitDeg = s.value("Nav/PpStuckExitDeg", 25.0).toDouble();
     // 前视距离必须 > 到达半径，否则接近目标时曲率计算病态（原地打摆）
     if (navParams.ppLookaheadMin < 0.2) navParams.ppLookaheadMin = 0.2;
     if (navParams.ppLookaheadMax < navParams.ppLookaheadMin)

@@ -101,6 +101,8 @@ void Navigator::start(quint32 taskId, double localX, double localY,
     }
     _lastFwdJoy = 0.0;
     _turnDirLock = 0;
+    _stuckSinceMs = 0;
+    _stuckAlign = false;
     _phase = Phase_Align;  // 先对准
     qInfo() << "[Navigator] 启动任务" << taskId
             << QString("目标(%1, %2) 限速%3 到达半径%4 超时%5ms SpeedMode=%6 SteeringMode=%7")
@@ -518,6 +520,62 @@ void Navigator::update(double localX, double localY, double localYaw,
             if (std::fabs(headingErr) < _params.holdYawOutDeadzoneRad)
                 yawHoldOut = 0.0;
             turnRate = yawHoldOut;
+        }
+    }
+
+    // ============================================================
+    // 【原地空转脱困】仅 Pure Pursuit。
+    // 曲率律 ω=2v·sinα/Ld 的前提是"狗真的按 v 前进"：一旦打滑原地转，
+    // 位置不动→α 不变→指令不变，就是现场看到的"原地画圈找不到去向"。
+    // 判据：转向大 + 期望前进 + 实测几乎不动，持续 ppStuckSec。
+    // 处置：前进量归零、方向饱和转向，先把朝向拧到 ppStuckExitDeg 以内；
+    // 对准段最长 8s，避免狗本身转不动时永久卡死。
+    // ============================================================
+    if (_params.steeringMode == Steering_PurePursuit && _params.ppStuckSec > 0.0)
+    {
+        const bool spin = std::fabs(turnRate) >= _params.ppStuckTurnMin
+                       && vDesRaw >= _params.ppStuckFwdMin
+                       && std::fabs(bodyVx) <= _params.ppStuckVxMax;
+        if (spin)
+        {
+            if (_stuckSinceMs == 0)
+                _stuckSinceMs = now;
+        }
+        else if (!_stuckAlign)
+        {
+            _stuckSinceMs = 0;
+        }
+
+        if (!_stuckAlign && _stuckSinceMs != 0
+            && (now - _stuckSinceMs) >= static_cast<qint64>(_params.ppStuckSec * 1000.0))
+        {
+            _stuckAlign = true;
+            _stuckAlignSinceMs = now;
+            qWarning().noquote() << QStringLiteral(
+                "[Nav] 原地空转 %1s（turnJoy 有输出但位置不动）：前进量归零，先原地对准，"
+                "朝向误差 %2°")
+                .arg((now - _stuckSinceMs) / 1000.0, 0, 'f', 1)
+                .arg(headingErr * 57.29577951308232, 0, 'f', 1);
+        }
+
+        if (_stuckAlign)
+        {
+            const bool aligned = std::fabs(headingErr) < (_params.ppStuckExitDeg * PI / 180.0);
+            const bool giveUp = (now - _stuckAlignSinceMs) > 8000;
+            if (aligned || giveUp)
+            {
+                qWarning().noquote() << QStringLiteral(
+                    "[Nav] 对准段结束%1：朝向误差 %2°，恢复 Pure Pursuit")
+                    .arg(giveUp ? QStringLiteral("（超时放行）") : QString())
+                    .arg(headingErr * 57.29577951308232, 0, 'f', 1);
+                _stuckAlign = false;
+                _stuckSinceMs = 0;
+            }
+            else
+            {
+                vDesRaw = 0.0;   // 关键：前进量清零，不再画小圈
+                turnRate = (headingErr >= 0.0 ? 1.0 : -1.0) * _params.maxTurnRate;
+            }
         }
     }
 

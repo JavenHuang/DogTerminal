@@ -89,6 +89,19 @@ public:
         double ppLookaheadMax;        // 前视距离上限 m
         double ppLookaheadK;          // 前视距离 = K * 巡航速度（秒）
 
+        // ---- 原地空转脱困 ----
+        // 曲率律假设狗按指令速度前进；狗一旦原地打滑（真实 bodyVx≈0 而
+        // turnRate 很大），方位角不变、指令不变，就会一直原地画圈。
+        // 判据：|turnRate|>=ppStuckTurnMin 且 期望前进速度>=ppStuckFwdMin 且
+        //       |bodyVx|<=ppStuckVxMax，持续 ppStuckSec 秒即判定空转，
+        //       改走"前进有效值归零 + 方向饱和转向"的对准段，直到朝向误差
+        //       回到 ppStuckExitDeg 以内再交还 Pure Pursuit。
+        double ppStuckSec;            // 判定空转所需持续秒数（<=0 关闭）
+        double ppStuckTurnMin;        // 触发空转的转向角速率门限 rad/s
+        double ppStuckFwdMin;         // 触发空转的期望前进速度门限 m/s
+        double ppStuckVxMax;          // 触发空转的实际前向速度上限 m/s
+        double ppStuckExitDeg;        // 退出对准段的朝向误差（度）
+
         // ---- 速度闭环：摇杆归一化值 → 实际 m/s 的自适应增益 ----
         // SetRemote 传的是归一化量，"1.0 摇杆 = 多少 m/s"随地面材质、
         // 电量、速度档位漂移。开启后用实测 bodyVx 反算真实增益并慢速跟随，
@@ -131,6 +144,11 @@ public:
             , ppLookaheadMin(0.6)
             , ppLookaheadMax(1.5)
             , ppLookaheadK(0.5)
+            , ppStuckSec(4.0)
+            , ppStuckTurnMin(0.30)
+            , ppStuckFwdMin(0.25)
+            , ppStuckVxMax(0.08)
+            , ppStuckExitDeg(25.0)
             , joyGainAdaptEnable(true)
             , joyGainMin(0.3)
             , joyGainMax(3.0)
@@ -245,6 +263,11 @@ private:
     // 大角度掉头方向锁：±1=锁定的转向方向，0=未锁定。
     // yawErr 在 ±π 处翻符号会让 P 控制来回反向，锁定后误差连续展开
     int _turnDirLock = 0;
+
+    // 原地空转脱困：空转计时 + 是否处于"强制对准"段 + 已打印过提示
+    qint64 _stuckSinceMs = 0;
+    qint64 _stuckAlignSinceMs = 0;
+    bool   _stuckAlign = false;
 };
 
 #endif  // NAVIGATOR_H
