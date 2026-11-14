@@ -176,6 +176,9 @@ public:
     bool isSoftArrived() const { return _phase == Phase_SoftArrived; }
     quint32 taskId() const { return _taskId; }
     double remainingDist() const { return _remainingDist; }
+    // 当前任务的局部坐标目标（到点复核要用它反算地图残差）
+    double targetLocalX() const { return _targetX; }
+    double targetLocalY() const { return _targetY; }
 
 public slots:
     // 由主控制器按狗状态更新周期调用（局部坐标）

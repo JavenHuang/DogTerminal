@@ -203,6 +203,10 @@ void MainController::onDogStateData()
         _st.staleStopped = false;   // 状态恢复，解除盲发暂停
     }
 
+    // 到点复核：位姿缓存刚更新（含刚才那次锚点修正），在这里判断残差
+    if (_avHold)
+        maybeFinishArriveVerify(nowMs());
+
     if (!_navigator->isActive() || !_dog->isConnected() || !_controlAcquired)
     {
         if (_navigator->isActive())
@@ -288,6 +292,7 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
                                     int frames, double spread)
 {
     ++_rkAnchorN;
+    ++_anchorSeq;   // 到点复核靠这个序号判"新锚点真的到了"
 
     if (!_rkBaseValid)
     {
@@ -311,6 +316,30 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
     const double dmy = mapY - _rkBaseMapY;
     const double lenR = std::sqrt(drx * drx + dry * dry);
     const double lenM = std::sqrt(dmx * dmx + dmy * dmy);
+
+    // ---- 尺度（k）校核：差分位移是"真米数"，地图位移是 odom×当前 scale ----
+    // 两者之比直接给出真实 k：k_true = k_cur × lenR / lenM。
+    // 只管打印、不自动改 map：尺度会改变整张地图的坐标，现场跑任务时静默改
+    // 会让正在执行的目标点在脚下移动；有偏差时用 mapline 重标一次更可控。
+    if (lenR >= 3.0 && lenM >= 2.0)
+    {
+        const double kTrue = _map.scale() * (lenR / lenM);
+        const double devPct = (kTrue / _map.scale() - 1.0) * 100.0;
+        if (std::fabs(devPct) >= 3.0)
+            qWarning().noquote()
+                << QStringLiteral("[Anchor] 尺度校核：本段差分 %1m / 地图 %2m → 真实 k≈%3"
+                                  "（当前 k=%4，偏差 %5%）——建议按此重发 mapline")
+                       .arg(lenR, 0, 'f', 2).arg(lenM, 0, 'f', 2)
+                       .arg(kTrue, 0, 'f', 3).arg(_map.scale(), 0, 'f', 3)
+                       .arg(devPct, 0, 'f', 1);
+        else
+            qInfo().noquote()
+                << QStringLiteral("[Anchor] 尺度校核通过：本段差分 %1m / 地图 %2m → k≈%3"
+                                  "（当前 k=%4，偏差 %5%）")
+                       .arg(lenR, 0, 'f', 2).arg(lenM, 0, 'f', 2)
+                       .arg(kTrue, 0, 'f', 3).arg(_map.scale(), 0, 'f', 3)
+                       .arg(devPct, 0, 'f', 1);
+    }
 
     // ---- 方向校准：估计 δ = 地图位移方向 − 差分位移方向，够一致就闭环进 refYaw ----
     // 两段位移都要够长，否则方位噪声被放大；δ 允许到 120°（现场常见几十度），

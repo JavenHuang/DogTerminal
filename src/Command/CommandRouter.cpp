@@ -103,6 +103,32 @@ void CommandRouter::handleMoveCmd(const QByteArray &body)
         _report.publishFeedback(cmd.taskId, DogProtocol::MR_REJECTED, QStringLiteral("未取得SDK控制权"));
         return;
     }
+    // ---- 方向未校准门控 ----
+    // mapreset 把"当时狗体朝向"当作地图 0°(正东)。狗没摆正朝东时，整张终端地图
+    // 相对服务器地图转了一个角（日志实测差分与地图 yaw 差中位 −99°），
+    // 此时把服务器下发的 (Bx,By) 反变换到局部坐标会整体指向错误方向——
+    // 现场观感就是"地图显示回到 00，实际没到，还反复兜圈"。
+    // 方向闭环（两段 ≥1.2m 的位移方向比对）完成后才放行；在此之前：
+    //   Rtk/RequireAlignBeforeTask=true  → 拒收，明确告诉服务器方向未校准
+    //   false（默认）                    → 只告警，仍按当前地图执行
+    if (!_host.mapDirectionAligned())
+    {
+        const QString why = QStringLiteral(
+            "终端地图方向未校准（差分方向闭环未完成），当前 (Bx,By) 反变换会整体偏角");
+        if (_cfg.rtkRequireAlign)
+        {
+            qWarning().noquote() << "[Main] 拒绝导航任务 task" << cmd.taskId << "：" << why
+                                 << "；按 Rtk/RequireAlignBeforeTask=true 拒收，"
+                                    "请先把狗走两段 ≥1.2m 完成方向校准";
+            _report.publishFeedback(cmd.taskId, DogProtocol::MR_REJECTED,
+                                    QStringLiteral("地图方向未校准（未完成方向闭环）"));
+            return;
+        }
+        qWarning().noquote() << "[Main] 导航任务 task" << cmd.taskId << "："
+                             << why << "；仍按当前地图执行，"
+                                "建议先走两段 ≥1.2m 触发方向闭环后重发";
+    }
+
     double maxSpeed = cmd.maxSpeed;
     if (maxSpeed <= 0)
         maxSpeed = _cfg.navParams.maxLinearSpeed;

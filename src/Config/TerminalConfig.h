@@ -167,6 +167,19 @@ struct TerminalConfig
     double rtkAnchorMinApplyM;   // 修正量小于该值不动位姿 m（默认 0.12，防抖）
     double rtkAnchorBootMoveM;   // 估计"差分系→地图系"转角所需的最小段长 m（默认 1.2）
 
+    // ---- 任务前方向门控 + 到点复核修正段 ----
+    // 方向门控：mapreset 把"当时狗体朝向"当 0°(正东)，狗没摆正就整帧转了
+    // （日志实测差分与地图 yaw 差中位 −99°）。方向闭环完成前收到的目的地，
+    // 反变换到局部坐标会整体指向错方向 → 兜圈。true 时直接拒收。
+    bool   rtkRequireAlign = false;   // [Rtk] RequireAlignBeforeTask（默认 false=只告警）
+    // 到点复核：到点先等一个静置锚点把位姿钉准，再按残差决定补一小段。
+    // 差分单点精度只有 ±0.2~0.3m，只靠到达半径判定经常落点差 0.4m 以上。
+    bool   navArriveVerify = false;   // [Nav] ArriveVerify（默认 false，现场验证后再开）
+    double navArriveResidualM = 0.15; // 残差门限 m（默认 0.15）
+    int    navArriveMaxFix = 2;       // 最多补几段（默认 2）
+    int    navArriveWaitMs = 4000;    // 等锚点的超时 ms（默认 4000）
+    double navArriveFixRadiusM = 0.10; // 修正段的到达半径 m（默认 0.10）
+
     // ---- 目标检测（YOLO26 检测结果 UDP → MQ 转发）----
     // 188 的检测服务把每帧推理结果（完整 JSON 或 base64 分片）发到本机端口，
     // 终端重组后原样转发到 MQ 路由键 detection.<terminalId>，服务端按同一份

@@ -348,8 +348,9 @@ bool TerminalConfig::load(const QString &iniPath)
     rtkYawBiasWarnDeg = qBound(0.0, s.value("Rtk/YawBiasWarnDeg", 3.0).toDouble(), 180.0);
 
     // ---- 静置锚点：差分只做"停稳时锚定一次"，不做位姿流、不参与 k 标定 ----
-    // 格点量化 0.61×0.42m，单帧 RMS≈0.21m；静止重复采样的量化误差零均值，
-    // 窗口取中值可把标准差压到 0.05~0.1m，这是突破格点的唯一办法。
+    // 实测：位置量化在 0.61×0.42m 格点，静止时输出"冻在同一格"（同一格点可连续
+    // 67 帧≈17.6s 不变），不是零均值抖动——所以窗口取中值拿不回格内细节，
+    // 单次锚点精度就是 ±0.2~0.3m。它的价值是消掉里程计的累积漂移，不是提高单点精度。
     {
         const QString mode = s.value("Rtk/AnchorMode", QStringLiteral("rest"))
                                  .toString().trimmed().toLower();
@@ -365,6 +366,22 @@ bool TerminalConfig::load(const QString &iniPath)
         // 位置不走死推算时，"钉位姿"无处可钉（原始模式只对齐 raw 基准）
         if (!posePosSourceDr)
             rtkAnchorRest = false;
+    }
+
+    // ---- 任务前方向门控 + 到点复核修正段 ----
+    // 方向门控：mapreset 把"当时狗体朝向"当 0°(正东)，狗没摆正就是整帧转了；
+    // 方向闭环（两段 ≥1.2m 位移方向比对）完成前，服务器 (Bx,By) 反变换会整体偏角。
+    rtkRequireAlign = s.value("Rtk/RequireAlignBeforeTask", false).toBool();
+    navArriveVerify     = s.value("Nav/ArriveVerify", false).toBool();
+    navArriveResidualM  = qBound(0.03, s.value("Nav/ArriveResidualM", 0.15).toDouble(), 1.0);
+    navArriveMaxFix     = qBound(0, s.value("Nav/ArriveMaxFix", 2).toInt(), 5);
+    navArriveWaitMs     = qBound(500, s.value("Nav/ArriveVerifyWaitMs", 4000).toInt(), 20000);
+    navArriveFixRadiusM = qBound(0.03, s.value("Nav/ArriveFixRadiusM", 0.10).toDouble(), 2.0);
+    // 这两项都依赖"差分静置锚点"：没有差分或位置不走死推算时直接关掉
+    if (!rtkEnabled || !posePosSourceDr)
+    {
+        rtkRequireAlign = false;
+        navArriveVerify = false;
     }
 
     // ---- 目标检测（YOLO26 检测结果 UDP → MQ 转发）----
@@ -551,6 +568,13 @@ QStringList TerminalConfig::dumpParams() const
            .arg(rtkAnchorMinStillMs)
            .arg(rtkAnchorMinApplyM, 0, 'f', 2)
            .arg(rtkAnchorBootMoveM, 0, 'f', 2);
+    out << QStringLiteral("[Nav] arriveverify=%1 residual=%2 maxfix=%3 waitms=%4 fixradius=%5 requirealign=%6")
+           .arg(navArriveVerify ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(navArriveResidualM, 0, 'f', 2)
+           .arg(navArriveMaxFix)
+           .arg(navArriveWaitMs)
+           .arg(navArriveFixRadiusM, 0, 'f', 2)
+           .arg(rtkRequireAlign ? QStringLiteral("true") : QStringLiteral("false"));
     out << QStringLiteral("[Detection] enabled=%1 bind=%2 port=%3 routingkey=%4 maxhz=%5 skipempty=%6 verboselog=%7")
            .arg(detEnabled ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(detBind).arg(detPort)

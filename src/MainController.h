@@ -142,8 +142,27 @@ private:
     int    _rkRotSamples = 0;   // 已用于估计转角的段数
     int    _rkRotApplied = 0;   // 已把转角闭环进 refYaw 的次数（每次参考最多 2 次）
     int    _rkAnchorN = 0;      // 本参考下已消费的锚点次数（日志用）
+    int    _anchorSeq = 0;      // 每消费一个静置锚点 +1（到点复核用它判"新锚点到了"）
     // 消费一个静置锚点：更新基准、按需修正 _dr 位姿
     void applyRtkAnchor(double ax, double ay, double mapX, double mapY, int frames, double spread);
+    // 方向是否已闭环（差分方向校准未完成时 false，供 CommandRouter 门控）
+    bool mapDirectionAligned() const override;
+
+    // ---- 到点复核 + 修正段（[Nav] ArriveVerify）----
+    // 到点不立刻上报：先等一个静置锚点把位姿钉准，再用"地图目标 vs 锚后位姿"
+    // 的残差判断要不要补一小段。差分单点只有 ±0.2~0.3m，只靠到达半径判定，
+    // 实际落点经常差 0.4m 以上。
+    bool   _avHold = false;              // 正在等锚点：结果暂不发布
+    quint32 _avTaskId = 0;
+    DogProtocol::MoveResult _avResult = DogProtocol::MR_ARRIVED;
+    double _avRemain = 0.0;
+    QString _avMsg;
+    int    _avFixLeft = 0;               // 本次任务还剩几段修正
+    int    _avAnchorSeq = -1;            // 到点时刻的锚点序号
+    qint64 _avDeadlineMs = 0;
+    // 每拍调用：到点且锚点已到（或超时）时算残差、决定补段或发布
+    void maybeFinishArriveVerify(qint64 nowMs);
+    void publishHeldArrive();
 
     QTimer *_stateTimer;      // 状态上报
     QTimer *_hbTimer;         // 终端心跳

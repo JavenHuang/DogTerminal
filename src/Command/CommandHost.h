@@ -41,6 +41,16 @@ public:
     // (当前局部点 - 参考点) 会被污染，k 会算出 1.4x 之类的假值。
     // 返回 false 表示当前没有可用的行程数据（未标定或数据不足）。
     virtual bool lineTraceDisplacement(double *vLocalX, double *vLocalY) const = 0;
+
+    // 终端地图的朝向是否已经对齐到"差分坐标（= 服务器地图）"。
+    // 为什么需要：mapreset 把"当时狗体朝向"定义成 0°(正东)，狗没摆正朝东时
+    // 整张终端地图相对服务器地图转了一个角（日志实测这个角常是几十度，
+    // 差分与地图 yaw 差中位 −99°）。此时服务器下发的 (Bx,By) 反变换到局部
+    // 坐标会指向完全错误的方向——现场表现就是"兜圈找不到去向"。
+    // 差分可用且死推算位姿生效时，靠两段 ≥1.2m 的位移方向自动闭环；
+    // 闭环前返回 false，由 Router 决定是告警还是拒收（见 Rtk/RequireAlignBeforeTask）。
+    // 无差分 / 非 dr 位姿时恒返回 true（该判据不适用）。
+    virtual bool mapDirectionAligned() const = 0;
 };
 
 #endif  // COMMAND_HOST_H
