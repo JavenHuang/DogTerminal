@@ -344,14 +344,15 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
     }
 
     // ---- 方向校准：估计 δ = 地图位移方向 − 差分位移方向，够一致就闭环进 refYaw ----
-    // 两段位移都要够长，否则方位噪声被放大；δ 允许到 120°（现场常见几十度），
-    // 但只接受"连续两段互差 ≤12°"的估计，避免把绕圈/弧线走成的一次方向跳当真。
+    // 两段位移都要够长，否则方位噪声被放大；δ 上限 60°（超过 60° 说明 mapreset 时
+    // 狗横得太歪，闭环会把整张地图转飞，宁可重来）。只接受"连续两段互差 ≤12°"的估计，
+    // 避免把绕圈/弧线走成的一次方向跳当真。
     const double boot = _cfg.rtkAnchorBootMoveM;
     if (_rkRotApplied < 2 && lenR >= boot && lenM >= boot)
     {
         const double delta = DogProtocol::radStd(std::atan2(dmy, dmx) - std::atan2(dry, drx));
         const double kConsist = 12.0 * M_PI / 180.0;
-        if (std::fabs(delta) <= 120.0 * M_PI / 180.0)
+        if (std::fabs(delta) <= 60.0 * M_PI / 180.0)
         {
             bool accept = false;
             if (_rkRotSamples == 0)
@@ -389,6 +390,25 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
             if (_rkRotSamples >= 2 && _rkRotApplied < 2)
             {
                 const double applied = _rkRotRad;
+                // 闭环＝绕地图原点整体旋转，当前点会跟着跳 d·sinδ。跳到 1m 以上就别硬转：
+                // 这说明 mapreset 时狗横得太歪，重来一次比"把地图转飞"便宜。
+                const double ox = _map.params().originX;
+                const double oy = _map.params().originY;
+                const double dFromO = std::sqrt((mapX - ox) * (mapX - ox) + (mapY - oy) * (mapY - oy));
+                const double jumpM = dFromO * std::fabs(std::sin(applied));
+                if (jumpM > 1.0)
+                {
+                    _rkRotRad = 0.0;
+                    _rkRotSamples = 0;
+                    qWarning().noquote()
+                        << QStringLiteral("[Anchor] 方向闭环被拒绝：需转 %1°、当前点会跳 %2m（距原点 %3m）。"
+                                          "请就地停稳 → mapreset 重新定原点 → 再走两段 ≥%4m 直线")
+                               .arg(applied * 180.0 / M_PI, 0, 'f', 1)
+                               .arg(jumpM, 0, 'f', 2)
+                               .arg(dFromO, 0, 'f', 2)
+                               .arg(boot, 0, 'f', 1);
+                    return;
+                }
                 _map.shiftRefYaw(-applied);
                 ++_rkRotApplied;
                 _rkRotRad = 0.0;
@@ -397,10 +417,12 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
                 _rkBaseValid = false;
                 qWarning().noquote()
                     << QStringLiteral("[Anchor] 方向校准闭环：地图系旋转 %1°，refYaw → %2°"
-                                      "（差分位移 %3m 与地图位移 %4m 同向；之后位置/航向都对齐差分）")
+                                      "（差分位移 %3m 与地图位移 %4m 同向；当前点因此移动 ≈%5m，"
+                                      "地图上所有已画点同步旋转过去，不是狗真跳了）")
                            .arg((-applied) * 180.0 / M_PI, 0, 'f', 1)
                            .arg(_map.refYaw() * 180.0 / M_PI, 0, 'f', 1)
-                           .arg(lenR, 0, 'f', 2).arg(lenM, 0, 'f', 2);
+                           .arg(lenR, 0, 'f', 2).arg(lenM, 0, 'f', 2)
+                           .arg(jumpM, 0, 'f', 2);
                 return;
             }
         }
@@ -560,7 +582,13 @@ void MainController::traceTick(const DogOdom &odom)
     const double mapDisp  = disp * _map.scale();
 
     double mapX = 0.0, mapY = 0.0, mapYaw = 0.0;
-    _map.toMap(odom.position[0], odom.position[1], _yaw->yaw(), &mapX, &mapY, &mapYaw);
+    // 与位姿流同源：优先用过滤后的 _st（DrPose 已剔除跳变、与导航/上报一致）。
+    // 原来这里拿原始 odom 换地图坐标，k 的逐秒行与"收尾"那行口径不同，
+    // 现场按每秒行判 k 会得出另一个数，白折腾。
+    if (_st.valid)
+        _map.toMap(_st.x, _st.y, _st.yaw, &mapX, &mapY, &mapYaw);
+    else
+        _map.toMap(odom.position[0], odom.position[1], _yaw->yaw(), &mapX, &mapY, &mapYaw);
 
     QString line = QStringLiteral("[Line] 里程计行程 %1m · 路径 %2m · 直线度 %3% · 方位 %4° "
                                   "· 地图位移 %5m（k=%6）· 地图(%7, %8) · 用时 %9s")

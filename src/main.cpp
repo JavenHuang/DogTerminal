@@ -8,7 +8,9 @@
 #include <QFileInfo>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QTimer>
 
+#include <csignal>
 #include <cstdio>
 
 #include "Config/TerminalConfig.h"
@@ -187,6 +189,24 @@ void openLog(const QString &path, int maxMb, int keep)
 
 }  // namespace
 
+namespace
+{
+// ============================================================
+// 退出信号：Ctrl-C / kill 时先停狗再退
+//
+// 之前没有安装 handler，SIGINT 默认终止进程：MQ/UDP 直接断电式退出，
+// stop() 从没跑过，狗会继续按最后一条控制流走（现场很危险）。
+// handler 只置标志（async-signal-safe），真正的停机放在事件循环里做。
+// ============================================================
+volatile sig_atomic_t g_quitSignal = 0;
+
+void onQuitSignal(int sig)
+{
+    g_quitSignal = sig;
+}
+
+}  // namespace
+
 // ============================================================
 // 机器狗终端程序入口（纯控制台）
 // 用法: dogterminal --config <ini路径> [--dump-params]
@@ -273,5 +293,26 @@ int main(int argc, char *argv[])
     }
     controller.start();
 
-    return app.exec();
+    // 退出信号：Ctrl-C / kill 后先走 controller.stop()（发停机、断链路、关日志），
+    // 再退出事件循环；否则狗会带着最后的控制流继续跑
+    std::signal(SIGINT, onQuitSignal);
+#ifdef SIGTERM
+    std::signal(SIGTERM, onQuitSignal);
+#endif
+
+    QTimer quitTimer;
+    quitTimer.setInterval(100);
+    QObject::connect(&quitTimer, &QTimer::timeout, [&controller, &quitTimer]() {
+        if (!g_quitSignal)
+            return;
+        quitTimer.stop();
+        alwaysMessage(QStringLiteral("[Main] 收到退出信号 %1：先停机再退出").arg(int(g_quitSignal)));
+        controller.stop();
+        QCoreApplication::quit();
+    });
+    quitTimer.start();
+
+    const int rc = app.exec();
+    alwaysMessage(QStringLiteral("[Main] 已退出（信号=%1）").arg(int(g_quitSignal)));
+    return rc;
 }

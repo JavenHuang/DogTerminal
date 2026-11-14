@@ -58,8 +58,21 @@ void NavBridge::acquireTick()
         if (!_acquireRetryDone)
         {
             _acquireRetryDone = true;
-            qInfo() << "[Main] SDK控制权未确认，已按配置停止重复申请"
-                    << "(AcquireRetryCount=" << _cfg.acquireRetryCount << ")，继续等待狗端反馈";
+            // 重试耗尽就把定时器停掉：否则它每拍空转，recoverTick 看到 isActive()
+            // 就永远不会再补申请，现场表现是"控权拿不到、任务还挂在那里不动"。
+            _acquireTimer->stop();
+            qWarning() << "[Main] SDK控制权未确认，已按配置停止重复申请"
+                       << "(AcquireRetryCount=" << _cfg.acquireRetryCount << ")，继续等待狗端反馈";
+            // 没有控权就动不了：把在跑的任务明确收尾，别让它挂在"执行中"耗超时
+            if (_navigator.isActive())
+            {
+                qWarning() << "[Main] 未取得控制权，取消在跑任务" << _navigator.taskId();
+                _navigator.cancel();
+            }
+        }
+        else
+        {
+            _acquireTimer->stop();
         }
         return;
     }

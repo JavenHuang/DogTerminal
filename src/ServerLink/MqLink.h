@@ -82,6 +82,7 @@ private:
     bool _connectRequested;
     bool _ready;
     bool _consuming;          // 多绑定下 bound 事件会多次触发，只 consume 一次
+    qint64 _dropReportMs;     // 未就绪丢包的上次告警时间（防刷屏）
 
     QTimer *_retryTimer;
 };

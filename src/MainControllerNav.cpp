@@ -200,6 +200,19 @@ void MainController::maybeFinishArriveVerify(qint64 nowMs)
                .arg(_cfg.navArriveResidualM, 0, 'f', 2)
                .arg(newAnchor ? QStringLiteral("· 锚点已生效")
                               : QStringLiteral("· 等锚点超时（狗可能没停稳或差分断流）"));
+    // 补段用尽仍超门限：不能只把残差写进 message 却继续报"到达"。
+    // 现场要的是"服务端也能看出这次没到精度"，所以改报 MR_FAILED 并把残差写清楚。
+    if (residual >= _cfg.navArriveResidualM)
+    {
+        _avResult = DogProtocol::MR_FAILED;
+        qWarning().noquote()
+            << QStringLiteral("[Arrive] 精度未达标 task%1：残差 %2m ≥ %3m（已补 %4 段用尽）"
+                              "→ 上报 MR_FAILED，服务器按未到点处理")
+                   .arg(_avTaskId)
+                   .arg(residual, 0, 'f', 2)
+                   .arg(_cfg.navArriveResidualM, 0, 'f', 2)
+                   .arg(_cfg.navArriveMaxFix);
+    }
     _avRemain = residual;   // 上报真实残差，让服务器/现场看到落点偏差
     _avMsg = _avMsg + QStringLiteral("；到点复核残差 %1m（差分锚点）")
                           .arg(residual, 0, 'f', 2);

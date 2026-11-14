@@ -6,6 +6,7 @@
 
 #include <QDebug>
 #include <QAbstractSocket>
+#include <QDateTime>
 
 MqLink::MqLink(QObject *parent)
     : QObject(parent)
@@ -17,6 +18,7 @@ MqLink::MqLink(QObject *parent)
     , _connectRequested(false)
     , _ready(false)
     , _consuming(false)
+    , _dropReportMs(0)
 {
     _retryTimer = new QTimer(this);
     _retryTimer->setSingleShot(true);
@@ -91,7 +93,23 @@ void MqLink::stop()
 void MqLink::publish(const QString &routingKey, const QByteArray &payload, const QString &mimeType)
 {
     if (!_ready || !_exchange)
+    {
+        // MQ 未就绪时静默丢包在现场很难查（服务器显示"已下发"、狗没动、日志无痕）。
+        // 行为不变（不排队），但每 5s 报一次，并区分"没连上"和"连上了但收发通道没建好"。
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        if (now - _dropReportMs >= 5000)
+        {
+            _dropReportMs = now;
+            qWarning().noquote()
+                << QStringLiteral("[Link] MQ 未就绪，丢弃下发 %1（%2，%3 字节）：%4")
+                       .arg(routingKey)
+                       .arg(_ready ? QStringLiteral("通道未建立") : QStringLiteral("连接未就绪"))
+                       .arg(payload.size())
+                       .arg(_ready ? QStringLiteral("等 exchange/queue 建立完再发")
+                                   : QStringLiteral("查 Host/Port/账号或网络"));
+        }
         return;
+    }
     // 必须显式指定 mimeType 以命中 QByteArray 重载：
     // 两参数调用会因 QByteArray→QString 隐式转换命中 QString 重载，
     // 二进制负载被当作文本处理（QDataStream 头部的 0x00 字节导致截断）
