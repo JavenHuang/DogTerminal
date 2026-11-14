@@ -9,6 +9,7 @@ TerminalConfig::TerminalConfig()
     , logMaxMb(20)
     , logKeep(3)
     , logLevel(QStringLiteral("debug"))
+    , logConsole(QStringLiteral("warn"))
     , mqPort(5672)
     , mqRetryMs(5000)
     , stateRateHz(10)
@@ -36,6 +37,7 @@ TerminalConfig::TerminalConfig()
     , rtkStaleMs(600)
     , rtkMaxJumpM(1.5)
     , rtkMaxJumpDeg(30.0)
+    , rtkZeroRebaseMax(2)
     , rtkAntennaX(0.0)
     , rtkAntennaY(0.0)
     , rtkYawOffsetDeg(0.0)
@@ -94,6 +96,7 @@ bool TerminalConfig::load(const QString &iniPath)
     logMaxMb   = s.value("Terminal/LogMaxMB", 20).toInt();
     logKeep    = s.value("Terminal/LogKeep", 3).toInt();
     logLevel   = s.value("Terminal/LogLevel", QStringLiteral("debug")).toString().trimmed().toLower();
+    logConsole = s.value("Terminal/LogConsole", QStringLiteral("warn")).toString().trimmed().toLower();
 
     mqHost     = s.value("RabbitMq/Host").toString();
     mqPort     = static_cast<quint16>(s.value("RabbitMq/Port", 5672).toUInt());
@@ -267,6 +270,7 @@ bool TerminalConfig::load(const QString &iniPath)
     rtkStaleMs      = qBound(200, s.value("Rtk/StaleMs", 600).toInt(), 5000);
     rtkMaxJumpM     = qBound(0.2, s.value("Rtk/MaxJumpM", 1.5).toDouble(), 20.0);
     rtkMaxJumpDeg   = qBound(5.0, s.value("Rtk/MaxJumpDeg", 30.0).toDouble(), 179.0);
+    rtkZeroRebaseMax = qBound(-1, s.value("Rtk/ZeroRebaseMax", 2).toInt(), 100);
     rtkAntennaX     = qBound(-2.0, s.value("Rtk/AntennaOffsetX", 0.0).toDouble(), 2.0);
     rtkAntennaY     = qBound(-2.0, s.value("Rtk/AntennaOffsetY", 0.0).toDouble(), 2.0);
     rtkYawOffsetDeg = qBound(-180.0, s.value("Rtk/YawOffsetDeg", 0.0).toDouble(), 180.0);

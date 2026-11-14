@@ -2,6 +2,7 @@
 #define MAP_TRANSFORM_H
 
 #include <QString>
+#include <cmath>
 
 // ============================================================
 // 狗原始局部坐标 <-> 本地地图坐标 变换
@@ -95,6 +96,14 @@ public:
     {
         _refX += dLocalX;
         _refY += dLocalY;
+    }
+
+    // 参考朝向补偿：狗端局部的 yaw 基准整体跳变（断链重连、SDK 坐标系重置后
+    // 常见 30~70° 的单帧台阶）时调用，refYaw 同步跟着跳，
+    // 地图 yaw 因此保持连续，狗的"相对旋转 90°"不会把台阶算成真实转向。
+    void shiftRefYaw(double dLocalYaw)
+    {
+        _refYaw = std::atan2(std::sin(_refYaw + dLocalYaw), std::cos(_refYaw + dLocalYaw));
     }
 
     // 直线标定：局部位移 vs 目标地图位移，拟合尺度与残余朝向。

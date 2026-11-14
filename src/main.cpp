@@ -20,13 +20,15 @@ namespace
 // ============================================================
 // 日志：控制台 + 可选落盘（按大小滚动）
 //
-// 控制台输出保持原样（行首不加前缀），因为现场排查时人眼看的还是这几行；
-// 落盘文件才带时间戳与级别，事后可以按级别筛、按时间对齐服务器日志。
+// 控制台级别与文件级别分开控制（Log/Console / LogLevel）：
+// 现场用 SSH 跑时控制台的 1Hz 状态行、每帧差分行会把真正有用的告警刷走，
+// 所以默认控制台只留告警以上，全部日志仍按 LogLevel 写进 .log 文件。
 //
 // 级别：debug < info < warn < error < off
 // 注意 QtMsgType 的枚举值顺序不是语义顺序（QtInfoMsg = 4），只能靠 rank 映射。
 // ============================================================
-int      gMinRank = 0;              // 当前允许输出的最低级别 rank
+int      gMinRank = 0;              // 写文件的最低级别 rank（LogLevel）
+int      gConsoleRank = 2;          // 打印到控制台的最低级别 rank（Log/Console，默认只留 warn 以上）
 QFile    gLogFile;
 QMutex   gLogMutex;
 QString  gLogPath;                  // 空 = 不落盘
@@ -88,9 +90,12 @@ void consoleMessageHandler(QtMsgType type, const QMessageLogContext &, const QSt
     if (levelRank(type) < gMinRank)
         return;
 
-    const QByteArray line = msg.toLocal8Bit() + '\n';
-    std::fwrite(line.constData(), 1, size_t(line.size()), stderr);
-    std::fflush(stderr);
+    if (levelRank(type) >= gConsoleRank)
+    {
+        const QByteArray line = msg.toLocal8Bit() + '\n';
+        std::fwrite(line.constData(), 1, size_t(line.size()), stderr);
+        std::fflush(stderr);
+    }
 
     if (gLogPath.isEmpty())
         return;
@@ -115,9 +120,28 @@ void consoleMessageHandler(QtMsgType type, const QMessageLogContext &, const QSt
 void alwaysMessage(const QString &msg)
 {
     const int saved = gMinRank;
+    const int savedConsole = gConsoleRank;
     gMinRank = 0;
+    gConsoleRank = 0;
     qInfo().noquote() << msg;
     gMinRank = saved;
+    gConsoleRank = savedConsole;
+}
+
+// 控制台级别：debug/info/warn/error/off；无法识别时退回 warn
+void applyConsoleLevel(const QString &level)
+{
+    const QString v = level.trimmed().toLower();
+    if (v == QLatin1String("debug"))
+        gConsoleRank = 0;
+    else if (v == QLatin1String("info"))
+        gConsoleRank = 1;
+    else if (v == QLatin1String("error"))
+        gConsoleRank = 3;
+    else if (v == QLatin1String("off"))
+        gConsoleRank = 4;      // 只在文件里留痕，控制台彻底静音
+    else
+        gConsoleRank = 2;      // warn 及未知值 = 只留告警/错误
 }
 
 void applyLogLevel(const QString &level)
@@ -214,6 +238,7 @@ int main(int argc, char *argv[])
 
     // 日志级别与落盘在配置读出来之后才生效；配置加载本身这几行始终可见
     applyLogLevel(cfg.logLevel);
+    applyConsoleLevel(cfg.logConsole);
 
     // 只 dump 参数时不落盘：避免按终端逐个核对参数时创建空日志，
     // 也不与正在运行的实例争同一个日志文件
@@ -222,10 +247,11 @@ int main(int argc, char *argv[])
         openLog(cfg.logFile, cfg.logMaxMb, cfg.logKeep);
 
     // 摘要与 dump 输出始终可见（不受 LogLevel 过滤）：现场就是用它们核对 ini 是否被读到
-    alwaysMessage(QStringLiteral("配置加载成功: %1  terminalId=%2  日志级别=%3  日志文件=%4")
+    alwaysMessage(QStringLiteral("配置加载成功: %1  terminalId=%2  日志级别=%3  控制台=%4  日志文件=%5")
                       .arg(iniPath)
                       .arg(cfg.terminalId)
                       .arg(cfg.logLevel)
+                      .arg(cfg.logConsole)
                       .arg(cfg.logFile.isEmpty() ? QStringLiteral("(仅控制台)")
                                                  : cfg.logFile));
     alwaysMessage(QStringLiteral("[Cfg] 生效参数 %1").arg(cfg.summaryText()));

@@ -137,6 +137,8 @@ private:
 
     // 里程计坐标系跳变检测：狗端 odom 重置（遥控接管/模式切换）时平移地图参考保持连续
     void compensateOdomJump(const DogOdom &odom);
+    // 狗端局部 yaw 基准整体跳变（断链/控制权重置后 30°+ 台阶）的参考朝向补偿
+    void compensateYawReset(const DogOdom &odom);
     // 重建地图参考（尺度从 YawStabilizer 取，参考变更后仍沿用）
     void resetMapReference(double localX, double localY, double localYaw) override;
     // 地图标定结果 → 融合标定（现场"只标方向、不打 4 个停点"的入口）
@@ -147,6 +149,10 @@ private:
     double _lastOdomX = 0.0;
     double _lastOdomY = 0.0;
     qint64 _lastOdomMs = 0;
+    // 断链恢复后狗端局部 yaw 基准整体跳变（SDK 坐标系重置）的检测与补偿
+    double _lastYawRad = 0.0;
+    qint64 _lastYawMs = 0;
+    bool   _lastYawValid = false;
     qint64 _lastNavDiagMs = 0;    // 导航闭环阻断诊断打印节流
 
 };

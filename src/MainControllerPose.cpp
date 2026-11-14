@@ -65,6 +65,7 @@ void MainController::onDogStateData()
     compensateOdomJump(odom);
     // yaw 稳定化：之后所有导航/地图/上报统一用 _yaw->yaw()，不再直接用 imu.rpy[2]
     _yaw->update(odom, imu);
+    compensateYawReset(odom);
     // 位移方向校核：用直线前进的里程计位移方向独立验证/重建航向基准
     _yaw->updateMotionHeading(odom, imu);
 
@@ -229,6 +230,58 @@ void MainController::compensateOdomJump(const DogOdom &odom)
         << QStringLiteral("[Map] 里程计跳变 %1m (dt=%2ms, vBody=%3m/s)，已平移地图参考保持连续: %4")
                .arg(dist, 0, 'f', 2)
                .arg(static_cast<int>(dt * 1000.0))
+               .arg(vBody, 0, 'f', 2)
+               .arg(_map.describe());
+}
+
+// 狗端局部 yaw 基准的整体跳变补偿。
+//
+// 现场实测（2026-11-14 13:01:47）：状态包中断 3~5s 恢复后，狗自报 raw yaw 从
+// 118° 直接跳到 -174°（60° 台阶），位置却只变了 0.09m。原因不是狗真转了，而是
+// SDK 会话被重置后局部坐标系重新起算（遥控器接管、控制权重新申请都会触发）。
+// 不补偿的后果：地图 yaw 从 11° 跳到 311°，随后的"相对旋转 90°"任务立刻判
+// "到位"（剩余 7.79°），其实是把跳变后的错朝向当成了目标——假到位。
+// 处理办法与位置跳变一致：让参考朝向跟着跳，地图 yaw 保持连续。
+void MainController::compensateYawReset(const DogOdom &odom)
+{
+    const double kRadToDeg = 180.0 / M_PI;
+
+    if (!odom.valid || !_yaw)
+        return;
+
+    const double yawNow = _yaw->yaw();
+    const qint64 now = nowMs();
+    if (!_lastYawValid)
+    {
+        _lastYawValid = true;
+        _lastYawRad = yawNow;
+        _lastYawMs = now;
+        return;
+    }
+
+    const double dYawRad = DogProtocol::radStd(yawNow - _lastYawRad);
+    const double gapSec = static_cast<double>(now - _lastYawMs) / 1000.0;
+    const double vBody = std::sqrt(static_cast<double>(odom.vBody[0]) * odom.vBody[0]
+                                   + static_cast<double>(odom.vBody[1]) * odom.vBody[1]);
+
+    _lastYawRad = yawNow;
+    _lastYawMs = now;
+
+    // 只判"断过链 + 狗没动"的组合：真实转向一定伴随速度或角速度，
+    // 正常 1Hz/20Hz 相邻帧也不会有 30° 以上台阶
+    if (gapSec < 2.0 || std::fabs(dYawRad) * kRadToDeg < 30.0)
+        return;
+    if (vBody > 0.15)
+        return;
+    if (!_map.isActive() || !_map.params().jumpCompensate)
+        return;
+
+    _map.shiftRefYaw(dYawRad);
+    qWarning().noquote()
+        << QStringLiteral("[Map] 狗端 yaw 基准跳变 %1°（断链 %2ms、vBody=%3m/s，狗未移动），"
+                          "已同步平移参考朝向保持航向连续: %4")
+               .arg(dYawRad * kRadToDeg, 0, 'f', 1)
+               .arg(static_cast<int>(gapSec * 1000.0))
                .arg(vBody, 0, 'f', 2)
                .arg(_map.describe());
 }

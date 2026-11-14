@@ -16,12 +16,15 @@ struct TerminalConfig
     // ---- 终端标识 ----
     quint32 terminalId;          // 终端ID（唯一，路由键用）
 
-    // ---- 日志（控制台始终输出；LogFile 非空时同时落盘并按大小滚动）----
-    // Level：debug|info|warn|error|off，低于该级别的日志不输出（默认 debug=全输出）
+    // ---- 日志（文件始终按 LogLevel 记录；控制台由 LogConsole 单独控制）----
+    // Level：debug|info|warn|error|off，低于该级别的日志不写文件（默认 debug=全写）
+    // Console：debug|info|warn|error|off，低于该级别的日志不打印到终端（默认 warn，
+    //          即终端只看告警/错误，1Hz 状态行与每帧差分行只留在 .log 里）
     QString logFile;             // 落盘路径，相对路径按应用目录解析；空=只输出控制台
     int     logMaxMb;            // 单个文件上限 MB（0=不滚动，默认 20）
     int     logKeep;             // 滚动保留份数（默认 3，即 .1/.2/.3）
     QString logLevel;
+    QString logConsole;
 
     // ---- RabbitMQ 北向 ----
     QString mqHost;              // 服务器地址
@@ -97,6 +100,9 @@ struct TerminalConfig
     int    rtkStaleMs;           // 超过该值无新帧即判为断流 ms（默认 600）
     double rtkMaxJumpM;          // 相邻帧位置跳变上限 m（默认 1.5）
     double rtkMaxJumpDeg;        // 相邻帧航向跳变上限 度（默认 30）
+    int    rtkZeroRebaseMax;     // 一次会话内允许"差分模块重启→重取航向零位"的次数上限
+                                 //（默认 2。链路断一次就把航向顶 40~70°，无上限时航向基准
+                                 //  会被反复改写，旋转任务"到位"其实是错朝向；-1=不限）
     double rtkAntennaX;          // 天线相位中心相对狗体中心的前向偏置 m（前为正）
     double rtkAntennaY;          // 天线相位中心相对狗体中心的左向偏置 m（左为正）
     double rtkYawOffsetDeg;      // 天线基线方向与狗体纵轴的固定夹角 度（装反/装偏用）

@@ -45,6 +45,7 @@ private:
     double _rejectYawRad = 0.0;
     quint32 _badJumps = 0;
     int _restarts = 0;
+    bool _rebaseExhausted = false;   // 零位重取已达上限：此后航向跳变只丢弃，不再改写基准
 
     double _odomYawRad = 0.0;        // 最近一次被接受帧的里程计地图 yaw
     bool   _odomYawValid = false;

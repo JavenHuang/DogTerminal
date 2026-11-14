@@ -82,6 +82,22 @@ bool RtkJumpGate::accept(double cx, double cy, double yawRad, qint64 recvMs,
                 _jumpSinceMs = 0;
                 _rejectYawValid = false;
                 ++_restarts;
+                // 现场教训：链路断流一次就把差分航向顶 40~70°，恢复后被判"模块重启"，
+                // 于是每断一次就重取一次零位——航向基准被反复改写，旋转任务"到位"
+                // 其实是把当时的错朝向当成 0°。所以重取必须有上限。
+                if (_cfg.rtkZeroRebaseMax >= 0 && _restarts > _cfg.rtkZeroRebaseMax)
+                {
+                    if (!_rebaseExhausted)
+                    {
+                        _rebaseExhausted = true;
+                        qWarning().noquote() << QStringLiteral(
+                            "[Rtk] 航向零位重取已达上限 %1 次（累计判定 %2 次）：此后差分航向跳变"
+                            "一律丢弃，航向基准不再改写。若仍不稳，请置 Rtk/YawFromRtk=0 只用里程计航向")
+                            .arg(_cfg.rtkZeroRebaseMax).arg(_restarts);
+                    }
+                    ++_badJumps;
+                    return false;
+                }
                 qWarning().noquote() << QStringLiteral(
                     "[Rtk] 狗未转动时差分航向偏移 %1° 并稳定 %2ms（累计判定 %3 次）→ "
                     "判为差分模块重启，接受本帧并按当前地图朝向重取零位")
@@ -136,4 +152,7 @@ void RtkJumpGate::reset()
     _jumpSinceMs = 0;
     _yawJumpRun = 0;
     _rejectYawValid = false;
+    // 新参考下航向基准本来就要重取，重取次数重新计数
+    _restarts = 0;
+    _rebaseExhausted = false;
 }
