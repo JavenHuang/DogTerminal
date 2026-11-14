@@ -131,6 +131,11 @@ bool TerminalConfig::load(const QString &iniPath)
     // 启动时申请一次控制权；RetryCount=0 表示之后不再重复申请
     acquireRetryCount  = qBound(0, s.value("Dog/AcquireRetryCount", 0).toInt(), 1000);
     acquireRetryMs     = qBound(50, s.value("Dog/AcquireRetryMs", 500).toInt(), 60000);
+    // 链路自愈：状态包中断（狗端 stop pushing）时按该周期重发申请控制权。
+    // 0 = 关闭。狗端只向"会话持有者"推状态，遥控器接管/狗端看门狗重置后
+    // 终端必须重新握手才能恢复状态流，这就是"遥控器点一下就好使"的原因。
+    dogAutoRecoverMs  = qBound(0, s.value("Dog/AutoRecoverMs", 0).toInt(), 60000);
+    dogAutoRecoverMax = qBound(0, s.value("Dog/AutoRecoverMax", 20).toInt(), 1000);
     // 真狗联调时用于在终端控制台观察姿态与方向，默认1Hz；设为0可关闭
     dogStatePrintHz    = qBound(0, s.value("Dog/PrintStateHz", 1).toInt(), 20);
 

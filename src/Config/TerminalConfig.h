@@ -57,6 +57,8 @@ struct TerminalConfig
     int dogHeartbeatMs;          // 默认50
     int dogTimeoutMs;            // 默认5000
     bool autoAcquireControl;     // 连接后自动申请SDK控制权
+    int dogAutoRecoverMs;        // 链路自愈周期 ms（0=关闭）：状态包中断后重发申请控制权
+    int dogAutoRecoverMax;       // 链路自愈最多尝试次数（0=不限）
     int dogStatePrintHz;         // 本地控制台状态打印频率（0=关闭，默认1）
 
     // ---- MATRiX 仿真专属（Driver=matrix 时生效）----

@@ -41,6 +41,9 @@ public:
     // 控制节拍：直控续发 → 过期保护 → 推进导航
     void tick();
 
+    // 链路自愈：状态包停推（狗端会话失效）时自动重新握手，替代"人工拿遥控器点一下"
+    void recoverTick();
+
     void enterVelocityMode();
     void exitVelocityMode(bool sendZero);
 
@@ -65,6 +68,11 @@ private:
     int _acquireAttempts = 0;
     bool _acquireRetryDone = false;
     qint64 _lastNavOutMs = 0;
+
+    // 链路自愈状态
+    int _recoverTries = 0;
+    qint64 _lastRecoverMs = 0;
+    bool _linkWasOk = true;   // 上一次节拍里链路是否健康，用于识别"掉线边沿"
 
     // 速度直控最近一次下发量：控制节拍按 20Hz 续发，替代依赖服务器重发
     double _velFwd = 0.0;

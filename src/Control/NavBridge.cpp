@@ -130,6 +130,10 @@ void NavBridge::tick()
     // 差分断流观测（判断与打印都在跟踪器内部，这里只触发）
     _rtk.checkStale();
 
+    // 链路自愈必须跑在所有 return 之前：掉线时下面的分支全都直接返回，
+    // 没人会再去握手，只能人工拿遥控器点一下——这正是现场反复"断线"的观感。
+    recoverTick();
+
     if (!_running || !_dog->isConnected() || !_controlAcquired)
         return;
 
@@ -161,6 +165,51 @@ void NavBridge::tick()
 
     // 用最近一次状态推进一拍：Navigator 内部按本拍时间做速度平滑与超时判定
     stepFromCache();
+}
+
+void NavBridge::recoverTick()
+{
+    // 关闭态直接返回：0 表示沿用"人工处理"的老行为（与遥控器共存时更安全）
+    if (_cfg.dogAutoRecoverMs <= 0 || !_dog->isRunning())
+        return;
+
+    if (_dog->isConnected())
+    {
+        _recoverTries = 0;
+        _lastRecoverMs = 0;
+        _linkWasOk = true;
+        // 链路回来了但控制权还没拿到：自动补一次申请。
+        // 原来只有服务器显式下发 control 才会走 beginAcquire，掉线后就卡死在这里。
+        if (!_controlAcquired && !_acquireTimer->isActive())
+            beginAcquire();
+        return;
+    }
+
+    const qint64 now = nowMs();
+    if (_linkWasOk)
+    {
+        _linkWasOk = false;
+        _lastRecoverMs = 0;   // 掉线边沿：不等周期，立刻发一次
+        qWarning().noquote()
+            << QStringLiteral("[Main] 状态包停推，链路自愈启动：每 %1ms 重发申请SDK控制权"
+                              "（狗端只向会话持有者推状态，遥控器接管会打断该会话）")
+                   .arg(_cfg.dogAutoRecoverMs);
+    }
+
+    if (_cfg.dogAutoRecoverMax > 0 && _recoverTries >= _cfg.dogAutoRecoverMax)
+        return;   // 到上限后静默，不再无意义刷屏
+
+    if (_lastRecoverMs != 0 && (now - _lastRecoverMs) < _cfg.dogAutoRecoverMs)
+        return;
+
+    _lastRecoverMs = now;
+    ++_recoverTries;
+    _dog->sendCmd(Zsibot::CMD_SDK_CONTROL_RIGHT);
+    qWarning().noquote()
+        << QStringLiteral("[Main] 链路自愈 %1/%2：已重发申请SDK控制权")
+               .arg(_recoverTries)
+               .arg(_cfg.dogAutoRecoverMax > 0 ? QString::number(_cfg.dogAutoRecoverMax)
+                                               : QStringLiteral("不限"));
 }
 
 void NavBridge::enterVelocityMode()

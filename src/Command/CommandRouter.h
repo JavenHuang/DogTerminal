@@ -37,6 +37,9 @@ public:
     void handleStopCmd(const QByteArray &body);
     void handleParamCmd(const QByteArray &body);
 
+    // 速度直控被拒的统一出口：2s 节流，避免服务器高频连发把终端刷满
+    void rejectVelocityCmd(const QString &reason);
+
 private:
     const TerminalConfig &_cfg;
     Navigator &_navigator;
@@ -52,6 +55,11 @@ private:
     double &_velTurn;
     double &_velShift;
     CommandHost &_host;
+
+    // 速度直控被拒的日志/反馈节流：服务器常以 10~50Hz 连发 VelocityCmd，
+    // 链路掉线时每帧都会打一行"狗未就绪"，把现场终端刷满屏。
+    qint64 _lastVelRejectMs = 0;
+    int _velRejectCount = 0;
 };
 
 #endif  // COMMAND_ROUTER_H

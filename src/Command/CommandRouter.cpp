@@ -347,6 +347,23 @@ void CommandRouter::handleMapCalibCmd(const QByteArray &body)
     }
 }
 
+void CommandRouter::rejectVelocityCmd(const QString &reason)
+{
+    const qint64 now = nowMs();
+    // 同一原因 2s 内只打一行、只回一次拒绝；中间的帧静默计数
+    if (_lastVelRejectMs != 0 && (now - _lastVelRejectMs) < 2000)
+    {
+        ++_velRejectCount;
+        return;
+    }
+    qWarning().noquote()
+        << QStringLiteral("[Main] %1（上一次到现在另有 %2 帧被静默）")
+               .arg(reason).arg(_velRejectCount);
+    _lastVelRejectMs = now;
+    _velRejectCount = 0;
+    _report.publishFeedback(0, DogProtocol::MR_REJECTED, reason);
+}
+
 void CommandRouter::handleVelocityCmd(const QByteArray &body)
 {
     QDataStream in(body);
@@ -361,17 +378,14 @@ void CommandRouter::handleVelocityCmd(const QByteArray &body)
 
     // 导航执行中不接受速度直控
     if (_navigator.isActive())
-    {
-        const QString reason = QStringLiteral("导航执行中，忽略速度直控");
-        qWarning() << "[Main]" << reason;
-        _report.publishFeedback(0, DogProtocol::MR_REJECTED, reason);
+    {        const QString reason = QStringLiteral("导航执行中，忽略速度直控");
+        rejectVelocityCmd(reason);
         return;
     }
     if (!_dog->isConnected() || !_controlAcquired)
     {
         const QString reason = QStringLiteral("狗未就绪，忽略速度直控");
-        qWarning() << "[Main]" << reason;
-        _report.publishFeedback(0, DogProtocol::MR_REJECTED, reason);
+        rejectVelocityCmd(reason);
         return;
     }
 
