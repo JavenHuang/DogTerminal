@@ -99,7 +99,7 @@ void MainController::onDogStateData()
     compensateOdomJump(odom);
     // yaw 稳定化：之后所有导航/地图/上报统一用 _yaw->yaw()，不再直接用 imu.rpy[2]
     _yaw->update(odom, imu);
-    compensateYawReset(odom);
+    compensateYawReset(odom, imu);
     // 位移方向校核：用直线前进的里程计位移方向独立验证/重建航向基准
     _yaw->updateMotionHeading(odom, imu);
 
@@ -411,7 +411,13 @@ void MainController::compensateOdomJump(const DogOdom &odom)
 // 不补偿的后果：地图 yaw 从 11° 跳到 311°，随后的"相对旋转 90°"任务立刻判
 // "到位"（剩余 7.79°），其实是把跳变后的错朝向当成了目标——假到位。
 // 处理办法与位置跳变一致：让参考朝向跟着跳，地图 yaw 保持连续。
-void MainController::compensateYawReset(const DogOdom &odom)
+//
+// 2026-11-15 增强：run8 原始模式取证发现 yaw 单帧跳 >30° 共 271 次，而旧判据
+// （必须"断链 >=2s"）只抓到 2 次，其余全部原样进地图——这是"兜圈找不到去向"的
+// 主因之一（目标方位随 yaw 一起乱跳）。新判据改用陀螺做独立证据：
+//   本帧 yaw 变化 与 陀螺 z 轴积分 之差 > 阈值 → 一定是基准跳了，不是真转。
+// 这样 1Hz 帧、不断链的跳变也能被识别；真实转向由陀螺积分保留下来。
+void MainController::compensateYawReset(const DogOdom &odom, const DogImu &imu)
 {
     const double kRadToDeg = 180.0 / M_PI;
 
@@ -443,13 +449,37 @@ void MainController::compensateYawReset(const DogOdom &odom)
     _lastYawRad = yawNow;
     _lastYawMs = now;
 
-    // 只判"断过链 + 狗没动"的组合：真实转向一定伴随速度或角速度，
-    // 正常 1Hz/20Hz 相邻帧也不会有 30° 以上台阶
-    if (gapSec < 2.0 || std::fabs(dYawRad) * kRadToDeg < 30.0)
-        return;
-    if (vBody > 0.15)
-        return;
     if (!_map.isActive() || !_map.params().yawJumpCompensate)
+        return;
+
+    const double threshDeg = _cfg.yawJumpDeg > 1.0 ? _cfg.yawJumpDeg : 15.0;
+    if (std::fabs(dYawRad) * kRadToDeg < threshDeg)
+        return;                                  // 正常小步，无跳变
+
+    // ---- 判据 A：陀螺独立证据（帧间隔正常、报文带 gyro）----
+    // 真实转 Δyaw ≈ gyro_z*dt；两者悬殊说明是基准跳变而非真转。
+    if (imu.valid && imu.gyroField && gapSec > 0.05 && gapSec < 1.6)
+    {
+        const double expectRad = static_cast<double>(imu.gyro[2]) * gapSec;
+        const double diffRad   = DogProtocol::radStd(dYawRad - expectRad);
+        if (std::fabs(diffRad) * kRadToDeg < threshDeg)
+            return;                              // 与陀螺一致 → 真转，不动参考
+
+        _map.shiftRefYaw(diffRad);               // 只抹掉"基准"部分，保留真实转动
+        qWarning().noquote()
+            << QStringLiteral("[Map] 狗端 yaw 基准跳变 %1°（陀螺证据：本帧实转 %2°，"
+                              "差 %3°；vBody=%4m/s、间隔 %5ms），已同步平移参考朝向保持航向连续: %6")
+                   .arg(dYawRad * kRadToDeg, 0, 'f', 1)
+                   .arg(expectRad * kRadToDeg, 0, 'f', 1)
+                   .arg(diffRad * kRadToDeg, 0, 'f', 1)
+                   .arg(vBody, 0, 'f', 2)
+                   .arg(static_cast<int>(gapSec * 1000.0))
+                   .arg(_map.describe());
+        return;
+    }
+
+    // ---- 判据 B：无陀螺可用时退回旧规则（断链 >=2s 且狗没动）----
+    if (gapSec < 2.0 || vBody > 0.15)
         return;
 
     _map.shiftRefYaw(dYawRad);
