@@ -40,9 +40,11 @@ void RtkAnchor::onFrame(double x, double y, double speedMps, double yawRateRad, 
 
     if (_stillSinceMs == 0)
         _stillSinceMs = tMs;
-    if ((tMs - _stillSinceMs) < _p.minStillMs)
-        return;                          // 还没停够，等差分把静止位置送全
 
+    // 从"刚开始停稳"就往窗口里攒，而不是等够 minStillMs 才开始攒：
+    // 差分实测 3.8Hz（周期 263ms），窗口 12~15 帧本身就要 3.2~3.9s，
+    // 若再叠加 1.2s 的等待门槛，现场每到一点要站 5s 以上，节奏撑不住。
+    // 这些帧确实都是"已经停稳后"的帧（_stillSinceMs 之前的运动帧没有进窗）。
     _wx.append(x);
     _wy.append(y);
     while (_wx.size() > _p.windowFrames)
@@ -50,6 +52,8 @@ void RtkAnchor::onFrame(double x, double y, double speedMps, double yawRateRad, 
         _wx.removeFirst();
         _wy.removeFirst();
     }
+    if ((tMs - _stillSinceMs) < _p.minStillMs)
+        return;                          // 还没停够，继续攒
     if (_wx.size() < _p.windowFrames)
         return;                          // 窗口未满，继续攒
 

@@ -126,16 +126,22 @@ private:
     DrPose _dr;
 
     // ---- 差分静置锚定的相对基准 ----
-    // 不用差分绝对坐标，而是记"上一次锚点：差分位置 + 当时地图位姿"，
-    // 用两点的位移差去修正地图位姿。这样服务器/差分的坐标系原点、
-    // 终端 mapreset 的原点各管各的，不需要知道谁对应谁。
+    // 差分位置已经是地图坐标（正东 0°、顺时针、x 东正、y 南正），与本地图同向同号，
+    // 唯一未知量是"差分原点 vs mapreset 原点"的平移，以及 mapreset 时狗朝向
+    // 不是正东造成的整帧旋转。于是：
+    //   平移 → 记一次基准（差分位置 + 当时地图位姿），之后用它做位移差，
+    //          基准不再逐站前移（前移会把每站的量化误差累积成随机游走）；
+    //   旋转 → 用两段 ≥1.2m 的"差分位移方向 vs 地图位移方向"之差估计，
+    //          估计成立时直接 shiftRefYaw 把整个地图系转正，一次性闭环。
     bool   _rkBaseValid = false;
     double _rkBaseRtkX = 0.0;
     double _rkBaseRtkY = 0.0;
     double _rkBaseMapX = 0.0;
     double _rkBaseMapY = 0.0;
-    double _rkRotRad = 0.0;     // 差分系 → 地图系 的转角估计（首段前为 0）
+    double _rkRotRad = 0.0;     // 差分系 → 地图系 的转角估计（尚未闭环时用于换算）
     int    _rkRotSamples = 0;   // 已用于估计转角的段数
+    int    _rkRotApplied = 0;   // 已把转角闭环进 refYaw 的次数（每次参考最多 2 次）
+    int    _rkAnchorN = 0;      // 本参考下已消费的锚点次数（日志用）
     // 消费一个静置锚点：更新基准、按需修正 _dr 位姿
     void applyRtkAnchor(double ax, double ay, double mapX, double mapY, int frames, double spread);
 

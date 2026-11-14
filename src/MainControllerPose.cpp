@@ -248,6 +248,8 @@ void MainController::resetMapReference(double localX, double localY, double loca
     _rkBaseValid = false;
     _rkRotSamples = 0;
     _rkRotRad = 0.0;
+    _rkRotApplied = 0;
+    _rkAnchorN = 0;
     // 地图 0° 就是"此刻狗的朝向"，所以差分零位必须锚在同一姿态上：
     // 融合模块自己等静止窗口取 b，取到之前不建立偏移，避免随机零位污染航向基准。
     if (_cfg.rtkEnabled)
@@ -264,18 +266,29 @@ void MainController::resetMapReference(double localX, double localY, double loca
 
 
 
-// 差分静置锚点 → 位姿修正
+// 差分静置锚点 → 位姿修正 / 方向校准
 //
-// 为什么用"相对基准"，而不是把差分绝对坐标直接写进地图：
-//   差分给的是它自己的 ENU 原点，终端地图原点是 mapreset 那一刻的狗位姿，
-//   两者之间既有平移、也可能有旋转。直接把绝对坐标塞进地图，整张图的 0 点
-//   会跟着差分原点跑（infra 之前"标定 α 是 refYaw 附近"的混乱就源于此）。
-//   这里只记"上一次锚点的差分位置 + 当时的地图位姿"，用两次锚点之间的
-//   位移差校正地图位姿：平移和旋转都被这个位移差吸收，不需要知道谁对齐谁。
-//   特征：每段只在停稳时校一次，段内完全由 DrPose 推进，不产生位姿流。
+// 现场口径（用户确认 + 日志复核）：差分输出已经是地图坐标——正东 0°、顺时针
+// 0~360、x 轴东正西负、y 轴南正北负，与 MapTransform 的地图系同向同号。
+// 所以差分与本地图之间只可能剩两个未知量：
+//   ① 平移：差分原点 ≠ mapreset 原点（复位点就是地图 O），量级 1~3m 且每次
+//     mapreset 都变（日志：同一段会话 offset_x 中位 1.68m、前 1/3 与后 1/3 差 2.8m）；
+//   ② 旋转：mapreset 把"此刻狗体朝向"定义成 0°，若狗当时不是朝正东，
+//     整张终端地图相对服务器地图就转了这一个角（日志：差分与地图 yaw 差
+//     中位 -99°、p10/p90 -142/+161°，说明这个角常常是几十度而不是 0）。
+// 处理方式：平移用"一次基准 + 位移差"吸收，基准不再逐站前移——前移会让每站
+// 0.61×0.42m 格点的量化误差累积成随机游走；旋转则由两段 ≥1.2m 的
+// "差分位移方向 vs 地图位移方向"估出来，够一致时直接 shiftRefYaw 把整个
+// 地图系转正（一次性闭环），之后位置与航向同时对上差分。
+//
+// 注意：差分 yaw 本身不能用（日志实测 3.8Hz 输出、位置格点未变时 Δyaw 中位
+// 0.2°、位置一动与位移方向夹角中位 68.6°、2 分钟窗口跨度 359.9°），
+// 所以航向一律走 IMU + refYaw，差分只提供"位移方向"这一个方向信息。
 void MainController::applyRtkAnchor(double ax, double ay, double mapX, double mapY,
                                     int frames, double spread)
 {
+    ++_rkAnchorN;
+
     if (!_rkBaseValid)
     {
         _rkBaseValid = true;
@@ -299,30 +312,70 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
     const double lenR = std::sqrt(drx * drx + dry * dry);
     const double lenM = std::sqrt(dmx * dmx + dmy * dmy);
 
-    // 转角观测：两段位移都够长时才采信（短段的方位噪声会被放大）
-    // 差分系与地图系如果本来就同向，观测应长期≈0；若长期是一个非零常值，
-    // 说明两套坐标系有固定夹角，后续按它换算即可。
+    // ---- 方向校准：估计 δ = 地图位移方向 − 差分位移方向，够一致就闭环进 refYaw ----
+    // 两段位移都要够长，否则方位噪声被放大；δ 允许到 120°（现场常见几十度），
+    // 但只接受"连续两段互差 ≤12°"的估计，避免把绕圈/弧线走成的一次方向跳当真。
     const double boot = _cfg.rtkAnchorBootMoveM;
-    if (lenR >= boot && lenM >= boot)
+    if (_rkRotApplied < 2 && lenR >= boot && lenM >= boot)
     {
-        const double obs = DogProtocol::radStd(std::atan2(dry, drx) - std::atan2(dmy, dmx));
-        if (std::fabs(obs) <= 60.0 * M_PI / 180.0)
+        const double delta = DogProtocol::radStd(std::atan2(dmy, dmx) - std::atan2(dry, drx));
+        const double kConsist = 12.0 * M_PI / 180.0;
+        if (std::fabs(delta) <= 120.0 * M_PI / 180.0)
         {
+            bool accept = false;
             if (_rkRotSamples == 0)
-                _rkRotRad = obs;
+            {
+                _rkRotRad = delta;
+                accept = true;
+            }
+            else if (std::fabs(DogProtocol::radStd(delta - _rkRotRad)) <= kConsist)
+            {
+                // 圆周均值（两段幅值差已经被一致性门槛限制，这里只做平均）
+                _rkRotRad = std::atan2(std::sin(_rkRotRad) + std::sin(delta),
+                                       std::cos(_rkRotRad) + std::cos(delta));
+                accept = true;
+            }
             else
-                _rkRotRad = std::atan2(std::sin(_rkRotRad) + std::sin(obs),
-                                       std::cos(_rkRotRad) + std::cos(obs));
-            ++_rkRotSamples;
-            qInfo().noquote()
-                << QStringLiteral("[Anchor] 转角观测 %1°（已采 %2 段，当前估计 %3°）")
-                       .arg(obs * 180.0 / M_PI, 0, 'f', 1)
-                       .arg(_rkRotSamples)
-                       .arg(_rkRotRad * 180.0 / M_PI, 0, 'f', 1);
+            {
+                // 与已有估计差太多：以新样本重新起算，不叠加
+                _rkRotRad = delta;
+                _rkRotSamples = 0;
+                accept = true;
+                qWarning().noquote()
+                    << QStringLiteral("[Anchor] 方向样本突变 %1°，重新起算（本段差分 %2m / 地图 %3m）")
+                           .arg(delta * 180.0 / M_PI, 0, 'f', 1)
+                           .arg(lenR, 0, 'f', 2).arg(lenM, 0, 'f', 2);
+            }
+            if (accept)
+            {
+                ++_rkRotSamples;
+                qInfo().noquote()
+                    << QStringLiteral("[Anchor] 方向观测 %1°（已采 %2 段，当前估计 %3°）")
+                           .arg(delta * 180.0 / M_PI, 0, 'f', 1)
+                           .arg(_rkRotSamples)
+                           .arg(_rkRotRad * 180.0 / M_PI, 0, 'f', 1);
+            }
+            if (_rkRotSamples >= 2 && _rkRotApplied < 2)
+            {
+                const double applied = _rkRotRad;
+                _map.shiftRefYaw(-applied);
+                ++_rkRotApplied;
+                _rkRotRad = 0.0;
+                _rkRotSamples = 0;
+                // 地图系刚被整体旋转：位移基准随之作废，下一次停稳重建
+                _rkBaseValid = false;
+                qWarning().noquote()
+                    << QStringLiteral("[Anchor] 方向校准闭环：地图系旋转 %1°，refYaw → %2°"
+                                      "（差分位移 %3m 与地图位移 %4m 同向；之后位置/航向都对齐差分）")
+                           .arg((-applied) * 180.0 / M_PI, 0, 'f', 1)
+                           .arg(_map.refYaw() * 180.0 / M_PI, 0, 'f', 1)
+                           .arg(lenR, 0, 'f', 2).arg(lenM, 0, 'f', 2);
+                return;
+            }
         }
     }
 
-    // 目标地图位姿 = 上次锚点地图位姿 + R(转角) × (差分位移)
+    // 目标地图位姿 = 固定基准 + R(δ) × 差分位移（δ 未闭环时才有非零值）
     const double c = std::cos(_rkRotRad);
     const double s = std::sin(_rkRotRad);
     const double tx = _rkBaseMapX + (c * drx - s * dry);
@@ -356,32 +409,32 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
         _dr.reset(lx, ly);
         qWarning().noquote()
             << QStringLiteral("[Anchor] 锚定修正 %1m：地图(%2, %3) → (%4, %5)"
-                              "（差分(%6, %7) · 本段%8m · 窗口%9帧 · 散布%10m）")
+                              "（差分(%6, %7) · 本段%8m · 窗口%9帧 · 散布%10m · 第%11次锚点）")
                    .arg(err, 0, 'f', 2)
                    .arg(mapX, 0, 'f', 2).arg(mapY, 0, 'f', 2)
                    .arg(tx, 0, 'f', 2).arg(ty, 0, 'f', 2)
                    .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2)
                    .arg(lenM, 0, 'f', 2)
-                   .arg(frames).arg(spread, 0, 'f', 2);
+                   .arg(frames).arg(spread, 0, 'f', 2)
+                   .arg(_rkAnchorN);
     }
     else
     {
-        // 校正量小于阈值时不即位姿：静止重复采样本就有 ±0.1m 抖动，
-        // 每次都跟着改会让地图显示来回蹭。
+        // 校正量小于阈值时不即位姿：差分输出量化在 0.61×0.42m 格点上，
+        // 同一格内重复采样是恒定值（日志实测连续 67 帧不变），跟着改只会来回蹭。
         qInfo().noquote()
             << QStringLiteral("[Anchor] 复核通过：残差 %1m < 阈值 %2m，不修正"
-                              "（差分(%3, %4) · 本段%5m · 窗口%6帧）")
+                              "（差分(%3, %4) · 本段%5m · 窗口%6帧 · 第%7次锚点）")
                    .arg(err, 0, 'f', 2)
                    .arg(_cfg.rtkAnchorMinApplyM, 0, 'f', 2)
                    .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2)
                    .arg(lenM, 0, 'f', 2)
-                   .arg(frames);
+                   .arg(frames).arg(_rkAnchorN);
     }
 
-    _rkBaseRtkX = ax;
-    _rkBaseRtkY = ay;
-    _rkBaseMapX = tx;
-    _rkBaseMapY = ty;
+    // 关键：成功修正后"基准不动"。差分基准一旦前移，每站的量化误差就会
+    // 一段一段累加进地图，停 10 次就有 10 次误差的随机游走；固定基准只保留
+    // 一次常值偏置（可重复、可接受），漂移抑制效果完全一样。
 }
 
 void MainController::beginLineTrace()
