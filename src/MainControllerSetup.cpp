@@ -83,6 +83,11 @@ void MainController::initLinks()
     // 航向稳定器：依赖 cfg/地图/导航器/姿态快照；持久化尺度的载入也归它
     _yaw = new YawStabilizer(_cfg, *_navigator, _st, _velCtrlActive);
     _yaw->loadCalibScale();
+    if (_cfg.poseRawOdom)
+        qWarning().noquote()
+            << QStringLiteral("[Pose] 原始模式已开启（Pose/RawOdom=true）：位置与朝向一律直通狗体上报值，"
+                              "静止锁/跳变抑制/位移方向校核/参考平移全部关闭。"
+                              "断链或遥控接管造成的 yaw 台阶会原样进地图——这是本模式的预期行为。");
 
     // 上报与诊断：只借用其它子对象，不拥有它们
     _report = new ReportService(_cfg, _mq, _map, *_yaw, *_rtk, _status, _dog, *_navigator,

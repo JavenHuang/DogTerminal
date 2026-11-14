@@ -180,6 +180,8 @@ bool TerminalConfig::load(const QString &iniPath)
     poseDispMinSpeed = s.value("Pose/DispHdgMinSpeed", 0.12).toDouble();
     poseDispCorrectDeg = s.value("Pose/DispHdgCorrectDeg", 15.0).toDouble();
     poseDispReanchorDeg = s.value("Pose/DispHdgReanchorDeg", 45.0).toDouble();
+    // 原始模式：位置/朝向全部直通狗体上报值，关闭一切"识别 + 补偿"
+    poseRawOdom = s.value("Pose/RawOdom", false).toBool();
     if (staticLockSec < 0.0)
         staticLockSec = 0.0;
     if (yawJumpDeg < 1.0)
@@ -471,10 +473,11 @@ QStringList TerminalConfig::dumpParams() const
            .arg(mapParams.maxHeadingErrRad * 57.29577951308232, 0, 'f', 2)
            .arg(mapParams.coarseHeadingErrRad * 57.29577951308232, 0, 'f', 2)
            .arg(mapParams.minLineDist, 0, 'f', 2);
-    out << QStringLiteral("[Pose] yawstabilize=%1 staticlocksec=%2 yawjumpdeg=%3 maxframegapsec=%4")
+    out << QStringLiteral("[Pose] yawstabilize=%1 staticlocksec=%2 yawjumpdeg=%3 maxframegapsec=%4 rawodom=%5")
            .arg(yawStabilize ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(staticLockSec, 0, 'f', 2).arg(yawJumpDeg, 0, 'f', 2)
-           .arg(poseMaxGapSec, 0, 'f', 2);
+           .arg(poseMaxGapSec, 0, 'f', 2)
+           .arg(poseRawOdom ? QStringLiteral("true") : QStringLiteral("false"));
     out << QStringLiteral("[Nav] speedmode=%1 steering=%2 maxturnrate=%3 maxlinearspeed=%4 arriveradiusdefault=%5 softarrivemul=%6 maxaccel=%7 maxdecel=%8 postol=%9 debuglog=%10 ctrltickms=%11 staleStopms=%12")
            .arg(navParams.speedMode == Navigator::SpeedMode_Profile
                     ? QStringLiteral("profile") : QStringLiteral("cruise"))

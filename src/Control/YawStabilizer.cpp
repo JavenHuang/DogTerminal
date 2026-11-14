@@ -33,8 +33,10 @@ void YawStabilizer::update(const DogOdom &odom, const DogImu &imu)
     const qint64 now = nowMs();
     const double raw = imu.rpy[2];
 
-    // 关闭稳定化时直接透传原始 yaw
-    if (!_cfg.yawStabilize)
+    // 关闭稳定化时直接透传原始 yaw；
+    // 原始模式（Pose/RawOdom）同样透传——现场要拿狗体数据本身去对照时，
+    // 静止锁、跳变抑制、位移方向校核一律不参与，输出就是 imu.rpy[2]。
+    if (!_cfg.yawStabilize || _cfg.poseRawOdom)
     {
         _yawCorrected = DogProtocol::radStd(raw);
         _yawGyro = _yawCorrected;
@@ -263,6 +265,14 @@ void YawStabilizer::update(const DogOdom &odom, const DogImu &imu)
 
 void YawStabilizer::updateMotionHeading(const DogOdom &odom, const DogImu &imu)
 {
+    // 原始模式：不用位移方向去改航向基准
+    if (_cfg.poseRawOdom)
+    {
+        _mwActive = false;
+        _dispYawValid = false;
+        _yawSuspect = false;
+        return;
+    }
     if (!_cfg.poseDispAssist || !odom.valid || !imu.valid)
     {
         _mwActive = false;

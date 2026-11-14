@@ -81,6 +81,10 @@ struct TerminalConfig
     double poseDispMinSpeed;    // 进入窗口的最小速度（m/s）
     double poseDispCorrectDeg;  // 轻度修正门限（度）
     double poseDispReanchorDeg; // 直接重建门限（度）
+    // 原始模式：位姿/朝向一律直接用狗体上报值，不锁、不抑制、不补偿。
+    // 现场怀疑"补偿逻辑本身带偏"时用它跑一轮对照；断链/遥控接管导致的
+    // yaw 台阶会原样进地图（这是预期行为，不是 bug）。
+    bool   poseRawOdom;         // [Pose] RawOdom
 
     // ---- 导航参数 ----
     Navigator::Params navParams;

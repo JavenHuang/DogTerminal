@@ -337,6 +337,12 @@ void MainController::applyMapCalibToFusion()
 
 void MainController::compensateOdomJump(const DogOdom &odom)
 {
+    // 原始模式：位置跳变原样进地图，不做参考平移（现场要看到狗体的真实数据）
+    if (_cfg.poseRawOdom)
+    {
+        _lastOdomValid = false;
+        return;
+    }
     if (!odom.valid)
     {
         _lastOdomValid = false;
@@ -395,6 +401,13 @@ void MainController::compensateOdomJump(const DogOdom &odom)
 void MainController::compensateYawReset(const DogOdom &odom)
 {
     const double kRadToDeg = 180.0 / M_PI;
+
+    // 原始模式：yaw 台阶原样进地图
+    if (_cfg.poseRawOdom)
+    {
+        _lastYawValid = false;
+        return;
+    }
 
     if (!odom.valid || !_yaw)
         return;
