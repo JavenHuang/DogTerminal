@@ -56,12 +56,30 @@ bool DrPose::feed(double rawX, double rawY, double vBody, qint64 tMs)
 
     const double step = std::sqrt(dx * dx + dy * dy);
     const double v = (std::fabs(vBody) < 5.0) ? std::fabs(vBody) : 5.0;
-    double allow = _p.jumpK * v * dt + _p.jumpMinM;
+
+    // 判据的时间基准必须取"自上次位置变化以来的间隔"，不是包间隔。
+    // 2026-11-16 现场实测：odom.position 是成块刷新的（同一值重复若干包，
+    // 真正变化那一帧一步 0.12~0.45m，约 1s 一次），而包间隔只有 8~11ms。
+    // 用包间隔算 allow≈0.11m，于是"真实位移"整帧被判成跳变丢掉：
+    // 行程显示 0.43m，而差分/原始 odom 都是 1.1~1.2m，死推算也因此少走 0.72m。
+    const bool changed = (dx != 0.0 || dy != 0.0);
+    const qint64 sinceMs = (changed && _lastChangeMs > 0) ? (tMs - _lastChangeMs) : dtMs;
+    if (changed)
+        _lastChangeMs = tMs;
+    double dtEf = static_cast<double>(sinceMs) / 1000.0;
+    if (dtEf < dt)
+        dtEf = dt;                         // 位置每包都变时退回包间隔
+    if (dtEf > _p.maxDtSec)
+        dtEf = _p.maxDtSec;                // 长时间无变化后的一次大步：按断流上限估
+
+    double allow = _p.jumpK * v * dtEf + _p.jumpMinM;
     if (allow < _p.jumpMinM)
         allow = _p.jumpMinM;
 
     if (step > allow)
     {
+        // 只剩"物理上不可能"的步长会走到这里：静止时挪一步，或走动中
+        // 一跳超出 maxDtSec×速度上限。成块刷新的真实位移已被 dtEf 放过。
         ++_nRej;
         _rejM += step;
         return false;                      // 跳变帧：整帧丢弃

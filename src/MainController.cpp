@@ -209,6 +209,8 @@ void MainController::onMqMessage(const QString &routingKey, const QByteArray &pa
         && routingKey == _cfg.rtkRoutingKey)
     {
         _rtk->onFrame(payload);
+        // 差分位置跟随：数值一变（跨格点）就把位姿钉回差分，格点内交给死推算
+        syncRtkFollow();
         return;
     }
 
@@ -243,7 +245,7 @@ void MainController::dispatchMessage(quint16 msgType, const QByteArray &body)
     case DogProtocol::MSG_VELOCITY_CMD:   _cmd->handleVelocityCmd(body);        break;
     case DogProtocol::MSG_STOP_CMD:       _cmd->handleStopCmd(body);            break;
     case DogProtocol::MSG_PARAM_CMD:      _cmd->handleParamCmd(body);           break;
-    case DogProtocol::MSG_ABS_POSE_CMD:   _rtk->onFrame(body);                break;
+    case DogProtocol::MSG_ABS_POSE_CMD:   _rtk->onFrame(body); syncRtkFollow(); break;
 
     // 保留 ID：旧服务端仍可能下发坐标标定命令，终端已不再处理该语义。
     // 只提示一次，避免每条命令都刷成"未知消息类型"。

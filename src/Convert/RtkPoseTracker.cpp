@@ -483,6 +483,23 @@ bool RtkPoseTracker::takeAnchor(double *x, double *y, int *frames, double *sprea
     return _anchor.take(x, y, frames, spread);
 }
 
+// 最近一帧被接受的差分位姿。注意：被跳变门控挡掉的帧不会更新 _rtkX/_rtkY，
+// 所以"值没变"既可能是同格冻结，也可能是连续被门控挡住——两种情况都不该动位姿。
+bool RtkPoseTracker::lastFix(double *x, double *y, qint64 *recvMs, double *yawRad) const
+{
+    if (!_cfg.rtkEnabled || !_rtkSeen || !_rtkOriginValid)
+        return false;
+    if (x)
+        *x = _rtkX;
+    if (y)
+        *y = _rtkY;
+    if (recvMs)
+        *recvMs = _rtkRecvMs;
+    if (yawRad)
+        *yawRad = _rtkYaw;
+    return true;
+}
+
 // 断流观测：服务端标称 200ms，实测常见 500~560ms，偶尔 1s。
 // 阈值取 max(配置值, 3 个实测平均周期)，避免把正常抖动当成断流刷告警。
 // 只告警，不干预控制；恢复后不再重复告警（与原行为一致）。

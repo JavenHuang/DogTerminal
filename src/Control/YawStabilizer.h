@@ -41,6 +41,11 @@ public:
     // 稳定后的局部 yaw（逆时针为正，rad）
     double yaw() const { return _yawCorrected; }
 
+    // 外部真值接管航向（差分标定后角度即绝对真值）：把局部 yaw 直接钉到指定值，
+    // 并重置陀螺连续性状态（连续推算、raw 对齐、运动窗口）。此后 update() 从该值
+    // 继续陀螺积分桥接；运行期不再触发位移重建/raw 重锚/可疑裁决。
+    void forceReference(double localYawRad);
+
     // 诊断量（只读）：陀螺积分推算的连续 yaw、静止锁状态、航向是否待校核
     double gyroYaw() const { return _yawGyro; }
     bool staticLocked() const { return _staticLocked; }

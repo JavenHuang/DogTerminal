@@ -145,6 +145,40 @@ private:
     int    _anchorSeq = 0;      // 每消费一个静置锚点 +1（到点复核用它判"新锚点到了"）
     // 消费一个静置锚点：更新基准、按需修正 _dr 位姿
     void applyRtkAnchor(double ax, double ay, double mapX, double mapY, int frames, double spread);
+
+    // ---- 差分位置跟随（[Rtk] PosFollow=true）----
+    // 现场决定：位置以差分为准。差分的精度只有 0.61×0.42m 格点，但它是真值、
+    // 不漂；里程计只有"格点内推进"的价值。所以差分数值每变一次就把位姿钉回
+    // 差分推算位置（与静置锚点同一套 _rkBase*/_rkRotRad 换算），数值没变时
+    // （同格冻结，实测最长 17.6s）不跟随，让 DrPose 正常在格点内积分。
+    bool   _rkFollowValid = false;   // 已记录过一帧差分（用于判"值变没变"）
+    double _rkFollowX = 0.0;
+    double _rkFollowY = 0.0;
+    qint64 _rkFollowLogMs = 0;       // 跟随日志限流
+    // mapreset 时把当前差分 yaw 读数记为零位：之后差分报的角度都减这个零位，
+    // 等于"mapreset 那一刻的差分朝向 = 地图 0°"。开机标定一次，运行期不再改。
+    double _rtkYawZero = 0.0;
+
+    // ---- 差分异常 → 先停车（[Rtk] GuardStop=true）----
+    // 现场实测（11-16 两份日志）：差分位置会在相邻格点间来回跳（同一段行走 x 在
+    // 0.40/1.02/1.63/2.24/2.85 之间反复），单帧还出现过 2.12/3.03/3.21/3.14/2.75/2.02m
+    // 的整段跳；断流 1.5~3.0s 出现 8 次。此时位姿只能靠里程计猜，继续走就是拿
+    // 0.4m/s 把猜出来的误差走成实位移。所以判据命中就零速停在原地，等差分恢复
+    // （连续 N 帧稳定落在同一格）再继续同一个任务。
+    bool   _rtkHold = false;         // 正在因差分异常停车等数据（NavBridge 读它）
+    QString _rtkHoldWhy;             // 停车原因（日志/恢复时用）
+    double _rkGuardLastX = 0.0;      // 上一次见到的差分值（判"跳了几格"）
+    double _rkGuardLastY = 0.0;
+    qint64 _rkGuardLastChangeMs = 0; // 差分值上次变化的时刻（算物理允许步长）
+    int    _rkGuardGoodN = 0;        // 恢复判据：连续稳定帧数
+    qint64 _rkHoldLogMs = 0;         // 停车/恢复日志限流
+    bool   _rkGuardSeen = false;
+    // 每拍调用（20Hz）：断流 / 单帧跳格 → 停车；连续稳定 → 恢复
+    void updateRtkGuard();
+    // 把位姿钉到差分推算位置（基准 + 转角换算），返回是否真的修正了位姿
+    bool applyRtkFollowTo(double ax, double ay);
+    // 每收到一帧差分（已被跳变门控接受）调用一次
+    void syncRtkFollow();
     // 方向是否已闭环（差分方向校准未完成时 false，供 CommandRouter 门控）
     bool mapDirectionAligned() const override;
 
@@ -224,6 +258,7 @@ private:
     double _traceAccX = 0.0;
     double _traceAccY = 0.0;
     qint64 _traceLastMs = 0;
+    qint64 _traceLastChangeMs = 0; // 上一次 odom.position 真的变了的时刻（门限 dtEf 用）
     int    _traceJumpN = 0;        // 标定行程中被丢弃的跳变帧数
     double _traceJumpM = 0.0;      // 被丢弃的跳变累计米数
     qint64 _traceStartMs = 0;

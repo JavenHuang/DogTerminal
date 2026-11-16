@@ -232,6 +232,9 @@ void MainController::publishHeldArrive()
 // 其它组合恒 true（该判据不适用，不能因此拦任务）。
 bool MainController::mapDirectionAligned() const
 {
+    // YawFollow=true 时差分航向每帧直接钉入，方向已绝对正确，不再走位移方向闭环
+    if (_cfg.rtkYawFollow)
+        return true;
     if (!_cfg.rtkEnabled || !_cfg.posePosSourceDr || !_cfg.rtkAnchorRest)
         return true;
     return _rkRotApplied > 0;
@@ -248,6 +251,8 @@ void MainController::onVelocityTimeout()
 
 void MainController::onControlTick()
 {
+    // 差分异常守门先跑：断流/坐标跳动时先停车，20Hz 节拍里判，不依赖差分帧到达
+    updateRtkGuard();
     _nav->tick();
 }
 

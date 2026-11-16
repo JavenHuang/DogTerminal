@@ -15,7 +15,10 @@
 //   狗原地画圈（run7 14:51 连续 17s forwardJoy=1、|Δpos|=0.00）。
 //
 // 做法：只积分"合理步长"，跳变帧整帧丢弃。
-//   允许步长 = jumpK × |vBody| × dt + jumpMinM（下限 jumpMinM）。
+//   允许步长 = jumpK × |vBody| × dtEf + jumpMinM（下限 jumpMinM）。
+//   dtEf 取"自上次位置变化以来的间隔"，不是包间隔：odom.position 是成块
+//   刷新的（2026-11-16 实测单帧一步 0.12~0.45m、约 1s 一次），用包间隔会把
+//   真实位移判成跳变（行程 0.43m vs 差分 1.22m）。dtEf 上钳到 maxDtSec。
 //   跳变帧不改变位姿，也不改变 raw 基准（下一帧继续相对最新 raw 求增量）。
 //   断流超过 maxDtSec 时只对齐基准、不积分（避免把 3~5s 的位移当成一步）。
 //
@@ -68,6 +71,7 @@ private:
     double _rawX = 0.0;
     double _rawY = 0.0;
     qint64 _rawMs = 0;
+    qint64 _lastChangeMs = 0;   // 上一次"raw 位置真的变了"的时刻（dtEf 用）
     int    _nRej = 0;
     double _rejM = 0.0;
     double _travel = 0.0;

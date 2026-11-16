@@ -75,6 +75,12 @@ public:
     QString anchorText() const { return _anchor.describe(); }
     qint64 lastAnchorFrameMs() const { return _anchor.lastFrameMs(); }
 
+    // ---- 最近一帧差分位姿（已通过跳变门控）----
+    // 给"差分位置跟随"用：数值变了才代表跨了格点，没变就是同格冻结。
+    // 返回 false 表示还没收到过可用的帧（或被门控挡住，值保持在上一帧）。
+    // yawRad：可选出参，地图系航向（0=正东，顺时针为正，rad）；不需要传 nullptr。
+    bool lastFix(double *x, double *y, qint64 *recvMs, double *yawRad = nullptr) const;
+
     // 诊断：是否已收到过差分帧 / 最近一帧时刻（上报与打印用）
     bool seen() const { return _rtkSeen; }
     qint64 lastRecvMs() const { return _rtkRecvMs; }

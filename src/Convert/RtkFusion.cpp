@@ -635,7 +635,8 @@ void RtkFusion::onRtkFrame(double rtkX, double rtkY, double rtkYaw,
         // 冻结期间的残差就是"里程计自己走了这么久之后与绝对坐标的偏差"。
         // 均值长期偏大说明尺度/转角标定已不符（换轮、换狗、mapcalib 被改），
         // 但运动中无法直接校正，只能提示停车重标。
-        if (!_driftWarned && _driftCount >= 20)
+        // 现场口径：PosFollow 每帧直接钉位姿时，旧融合层的漂移已无意义，不刷告警。
+        if (!_driftWarned && _driftCount >= 20 && _p.useForNav)
         {
             const double avg = _driftSum / _driftCount;
             if (avg > 0.5)

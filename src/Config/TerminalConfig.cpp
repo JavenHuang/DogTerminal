@@ -176,6 +176,7 @@ bool TerminalConfig::load(const QString &iniPath)
     yawJumpDeg    = s.value("Pose/YawJumpDeg", 15.0).toDouble();
     poseMaxGapSec = s.value("Pose/MaxFrameGapSec", 3.0).toDouble();
     poseDispAssist = s.value("Pose/DispHdgAssist", true).toBool();
+    poseExternalYawRef = s.value("Pose/ExternalYawRef", true).toBool();
     poseDispMinDist = s.value("Pose/DispHdgMinDist", 0.8).toDouble();
     poseDispMinSpeed = s.value("Pose/DispHdgMinSpeed", 0.12).toDouble();
     poseDispCorrectDeg = s.value("Pose/DispHdgCorrectDeg", 15.0).toDouble();
@@ -360,12 +361,28 @@ bool TerminalConfig::load(const QString &iniPath)
         rtkAnchorMinStillMs  = qBound(200, s.value("Rtk/AnchorMinStillMs", 1200).toInt(), 20000);
         rtkAnchorMinApplyM   = qBound(0.0, s.value("Rtk/AnchorMinApplyM", 0.12).toDouble(), 5.0);
         rtkAnchorBootMoveM   = qBound(0.3, s.value("Rtk/AnchorBootMoveM", 1.20).toDouble(), 20.0);
+        // 位置跟随差分：和锚点一样，要不没有差分、要不位置必须走死推算
+        rtkPosFollow = s.value("Rtk/PosFollow", true).toBool();
+        rtkYawFollow = s.value("Rtk/YawFollow", true).toBool();
+        // 差分异常先停车：断流/坐标跳动时零速等数据，恢复后继续同一个任务
+        rtkGuardStop = s.value("Rtk/GuardStop", true).toBool();
+        rtkGuardStaleMs = qBound(300, s.value("Rtk/GuardStaleMs", 2000).toInt(), 20000);
+        rtkGuardJumpM = qBound(0.2, s.value("Rtk/GuardJumpM", 0.80).toDouble(), 10.0);
+        rtkGuardRecoverFrames = qBound(1, s.value("Rtk/GuardRecoverFrames", 3).toInt(), 50);
         // 没有收到差分就谈不上锚定
         if (!rtkEnabled)
             rtkAnchorRest = false;
         // 位置不走死推算时，"钉位姿"无处可钉（原始模式只对齐 raw 基准）
         if (!posePosSourceDr)
             rtkAnchorRest = false;
+        if (!rtkEnabled || !posePosSourceDr)
+        {
+            rtkPosFollow = false;
+            rtkGuardStop = false;
+        }
+        // 不跟随差分就没有"坐标跳动"可言，只剩断流；断流停车仍然有意义
+        if (!rtkPosFollow && !rtkEnabled)
+            rtkGuardStop = false;
     }
 
     // ---- 任务前方向门控 + 到点复核修正段 ----
@@ -552,7 +569,7 @@ QStringList TerminalConfig::dumpParams() const
            .arg(navParams.headingToleranceRad * 57.29577951308232, 0, 'f', 1)
            .arg(navParams.debugLog ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(navCtrlTickMs).arg(navCtrlStaleStopMs);
-    out << QStringLiteral("[Rtk] enabled=%1 routingkey=%2 diffid=%3 stale=%4 yawfromrtk=%5 useforpose=%6 autocalib=%7 autozero=%8 zerofromline=%9 holdms=%10 yawbiaswarn=%11 anchormode=%12 anchorwin=%13 anchorspread=%14 anchorstillms=%15 anchorapplym=%16 anchorbootm=%17")
+    out << QStringLiteral("[Rtk] enabled=%1 routingkey=%2 diffid=%3 stale=%4 yawfromrtk=%5 useforpose=%6 autocalib=%7 autozero=%8 zerofromline=%9 holdms=%10 yawbiaswarn=%11 anchormode=%12 anchorwin=%13 anchorspread=%14 anchorstillms=%15 anchorapplym=%16 anchorbootm=%17 posfollow=%18 guard=%19/%20ms/%21m/%22f")
            .arg(rtkEnabled ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(rtkRoutingKey).arg(rtkDiffId).arg(rtkStaleMs)
            .arg(rtkYawFromRtk ? QStringLiteral("true") : QStringLiteral("false"))
@@ -567,7 +584,12 @@ QStringList TerminalConfig::dumpParams() const
            .arg(rtkAnchorMaxSpreadM, 0, 'f', 2)
            .arg(rtkAnchorMinStillMs)
            .arg(rtkAnchorMinApplyM, 0, 'f', 2)
-           .arg(rtkAnchorBootMoveM, 0, 'f', 2);
+           .arg(rtkAnchorBootMoveM, 0, 'f', 2)
+           .arg(rtkPosFollow ? QStringLiteral("true") : QStringLiteral("false"))
+           .arg(rtkGuardStop ? QStringLiteral("on") : QStringLiteral("off"))
+           .arg(rtkGuardStaleMs)
+           .arg(rtkGuardJumpM, 0, 'f', 2)
+           .arg(rtkGuardRecoverFrames);
     out << QStringLiteral("[Nav] arriveverify=%1 residual=%2 maxfix=%3 waitms=%4 fixradius=%5 requirealign=%6")
            .arg(navArriveVerify ? QStringLiteral("true") : QStringLiteral("false"))
            .arg(navArriveResidualM, 0, 'f', 2)

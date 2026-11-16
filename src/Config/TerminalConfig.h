@@ -77,6 +77,11 @@ struct TerminalConfig
     double yawJumpDeg;          // 单帧 yaw 跳变判定阈值（度）
     double poseMaxGapSec;       // 单帧最大有效时间间隔（s），超过视为断线重锚
     bool   poseDispAssist;      // 位移方向辅助航向校验/重建
+    // 差分真值接管航向（2026-11-16 现场口径）：差分坐标/标定后角度均为绝对真值，
+    // 运行期不再用位移方向重建航向、不做 raw yaw 重锚、不做可疑裁决。
+    // 绝对朝向由差分帧经 YawStabilizer::forceReference() 每帧钉入，
+    // 帧间只靠陀螺积分桥接；标定只在开机做一次，运行期不重标定。
+    bool   poseExternalYawRef;
     double poseDispMinDist;     // 直线位移窗口长度（m）
     double poseDispMinSpeed;    // 进入窗口的最小速度（m/s）
     double poseDispCorrectDeg;  // 轻度修正门限（度）
@@ -166,6 +171,24 @@ struct TerminalConfig
     int    rtkAnchorMinStillMs;  // 停稳持续多久才开始取窗 ms（默认 1200）
     double rtkAnchorMinApplyM;   // 修正量小于该值不动位姿 m（默认 0.12，防抖）
     double rtkAnchorBootMoveM;   // 估计"差分系→地图系"转角所需的最小段长 m（默认 1.2）
+    // ---- 差分位置跟随（PosFollow）----
+    // 现场决定：位置以差分为准。差分只有 0.61×0.42m 格点的精度，但它是真值、
+    // 不漂；里程计的价值只是"格点内推进"。true 时差分数值每变一次就把位姿
+    // 钉回差分推算位置（与静置锚点同一套基准/转角换算），同格冻结时不跟随。
+    bool   rtkPosFollow = true;  // [Rtk] PosFollow（默认 true；只装 RTK 且位姿走 dr 时生效）
+    // 差分航向跟随（2026-11-16 现场口径）：标定后差分角度即地图朝向，
+    // 每个差分帧都把局部 yaw 钉到差分地图角（mapYawToLocalYaw），帧间陀螺桥接。
+    // 与 PosFollow 独立：位置同格冻结时角度仍照常钉。
+    bool   rtkYawFollow = true;  // [Rtk] YawFollow
+
+    // ---- 差分异常先停车（Guard）----
+    // 现场实测：差分在相邻格点间来回跳，单帧出现过 2.0~3.2m 整段跳；断流 1.5~3.0s
+    // 多次。此时位姿只能靠里程计推，继续走就是把误差走成实位移。命中判据就零速
+    // 停在原地、任务不取消，差分恢复（连续 N 帧落在同一格）后一次性落地并继续。
+    bool   rtkGuardStop = true;       // [Rtk] GuardStop（默认 true）
+    int    rtkGuardStaleMs = 2000;    // 多久没新差分帧算断流（默认 2000ms）
+    double rtkGuardJumpM = 0.8;       // 单帧差分跳多少米算"坐标跳动"（默认 0.8m）
+    int    rtkGuardRecoverFrames = 3; // 连续多少拍值不变算恢复（默认 3）
 
     // ---- 任务前方向门控 + 到点复核修正段 ----
     // 方向门控：mapreset 把"当时狗体朝向"当 0°(正东)，狗没摆正就整帧转了

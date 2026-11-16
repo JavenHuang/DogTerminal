@@ -27,7 +27,8 @@ public:
     NavBridge(const TerminalConfig &cfg, Navigator &navigator, RtkPoseTracker &rtk,
               DogClientBase *&dog, MotionState &st, ReportService &report,
               QTimer *acquireTimer, QTimer *velocityTimer,
-              bool &running, bool &controlAcquired, bool &velCtrlActive);
+              bool &running, bool &controlAcquired, bool &velCtrlActive,
+              bool &rtkHold);
 
     // 控制权申请：重置重试计数并立即下发一次，随后交给定时器按拍重试
     void beginAcquire();
@@ -64,6 +65,9 @@ private:
     bool &_running;
     bool &_controlAcquired;
     bool &_velCtrlActive;
+    // 差分异常停车（由主控制器 20Hz 判定）：为真时导航量一律按零速下发，
+    // 任务保持不动，等差分恢复后同一个任务从原地继续。
+    bool &_rtkHold;
 
     int _acquireAttempts = 0;
     bool _acquireRetryDone = false;

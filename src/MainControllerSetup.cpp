@@ -250,7 +250,9 @@ void MainController::initChannels()
                                   "运动中偏移冻结、位姿由里程计增量推进（规避差分 %3ms 滞后）")
                        .arg(fp.offStaticSpeed, 0, 'f', 2).arg(fp.offSlowYawRateDeg, 0, 'f', 1)
                        .arg(500);
-            if (!fp.useRtkYaw)
+            if (_cfg.rtkYawFollow)
+                qInfo().noquote() << "[Rtk] 差分航向每帧钉入（YawFollow=true），mapreset 标定零位后绝对跟随";
+            else if (!fp.useRtkYaw)
                 qInfo().noquote() << "[Rtk] 航向不采信差分（YawFromRtk=false），朝向只走里程计 + 标定转角";
             if (_cfg.rtkAnchorRest)
                 qWarning().noquote()
@@ -342,7 +344,7 @@ void MainController::initEngines()
     // 驱动节拍：借走两个定时器与运行标志，直控续发缓存归它独占
     _nav = new NavBridge(_cfg, *_navigator, *_rtk, _dog, _st, *_report,
                          _acquireTimer, _velocityTimer, _running,
-                         _controlAcquired, _velCtrlActive);
+                         _controlAcquired, _velCtrlActive, _rtkHold);
 
     // 下行指令：执行器由本类持有，路由器只借用
     _cmd = new CommandRouter(_cfg, *_navigator, *_attitude, _map, *_yaw, _dog,

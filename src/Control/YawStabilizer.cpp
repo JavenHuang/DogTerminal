@@ -25,6 +25,19 @@ YawStabilizer::YawStabilizer(const TerminalConfig &cfg, Navigator &navigator,
 {
 }
 
+void YawStabilizer::forceReference(double localYawRad)
+{
+    const double y = DogProtocol::radStd(localYawRad);
+    _yawCorrected = y;
+    _yawGyro = y;
+    _lastRawYaw = y;
+    _yawInit = true;
+    _yawSuspect = false;
+    _gyroAccum = 0.0;
+    _mwActive = false;
+    _dispYawValid = false;
+}
+
 void YawStabilizer::update(const DogOdom &odom, const DogImu &imu)
 {
     if (!imu.valid)
@@ -62,17 +75,22 @@ void YawStabilizer::update(const DogOdom &odom, const DogImu &imu)
     // 只剩偶发的短间隔帧参与判断，导致"真实快速转向被误判为跳变"。
     if (dt > _cfg.poseMaxGapSec)
     {
-        // 真正断线/长间隔：丢弃增量并重锚，避免把长时间漂移当成转动
+        // 真正断线/长间隔：丢弃增量，避免把长时间漂移当成转动
         _lastYawMs = now;
         _lastRawYaw = raw;
         _gyroAccum = 0.0;
         _yawSuspect = false;
-        qWarning().noquote()
-            << QStringLiteral("[Pose] 状态间隔 %1s 超过上限 %2s，航向基准已重锚于 raw yaw %3°")
-                   .arg(dt, 0, 'f', 2)
-                   .arg(_cfg.poseMaxGapSec, 0, 'f', 1)
-                   .arg(DogProtocol::radStd(raw) * kRadToDeg, 0, 'f', 2);
-        return;
+        // 外部真值接管模式：长间隔不重锚到 raw（那等于运行期重标定角度），
+        // 只把连续性记账清空，随后照常陀螺积分，绝对朝向等下一帧差分真值钉入。
+        if (!_cfg.poseExternalYawRef)
+        {
+            qWarning().noquote()
+                << QStringLiteral("[Pose] 状态间隔 %1s 超过上限 %2s，航向基准已重锚于 raw yaw %3°")
+                       .arg(dt, 0, 'f', 2)
+                       .arg(_cfg.poseMaxGapSec, 0, 'f', 1)
+                       .arg(DogProtocol::radStd(raw) * kRadToDeg, 0, 'f', 2);
+            return;
+        }
     }
     _lastYawMs = now;
 
@@ -116,7 +134,8 @@ void YawStabilizer::update(const DogOdom &odom, const DogImu &imu)
         }
         // 静止且已锁定：此时陀螺无转动证据，raw 若与连续朝向偏离很大，只可能是 IMU
         // 内部重锚（或滑移后的新基准），继续坚持旧值会让"待校核"永远学不回来。
-        if (_staticLocked)
+        // 外部真值接管模式下不重锚到 raw：绝对朝向由差分真值钉入，运行期不改基准。
+        if (!_cfg.poseExternalYawRef && _staticLocked)
         {
             const double gap0 = std::fabs(DogProtocol::radStd(DogProtocol::radStd(raw) - _yawCorrected));
             if (gap0 > 20.0 / kRadToDeg)
@@ -148,6 +167,19 @@ void YawStabilizer::update(const DogOdom &odom, const DogImu &imu)
     _gyroAccum += g;
     if (!_staticLocked)
         _yawGyro = DogProtocol::radStd(_yawGyro + g);
+
+    // ---- 外部真值接管航向（差分标定后角度即绝对真值）----
+    // 不再做 raw 仲裁 / 可疑标记 / 位移方向重建：那些等于运行期重标定角度。
+    // 帧间只靠陀螺积分桥接；绝对朝向由 forceReference() 每个差分帧钉入。
+    if (_cfg.poseExternalYawRef)
+    {
+        _lastRawYaw = raw;
+        _gyroAccum = 0.0;
+        _yawSuspect = false;
+        if (!_staticLocked)
+            _yawCorrected = _yawGyro;
+        return;
+    }
 
     const bool rawChanged = (std::fabs(raw - _lastRawYaw) > 1e-9);
     if (!rawChanged)
@@ -267,6 +299,14 @@ void YawStabilizer::updateMotionHeading(const DogOdom &odom, const DogImu &imu)
 {
     // 原始模式：不用位移方向去改航向基准
     if (_cfg.poseRawOdom)
+    {
+        _mwActive = false;
+        _dispYawValid = false;
+        _yawSuspect = false;
+        return;
+    }
+    // 外部真值接管模式：位移方向重建/校核整体关闭（运行期不再重标定角度）
+    if (_cfg.poseExternalYawRef)
     {
         _mwActive = false;
         _dispYawValid = false;

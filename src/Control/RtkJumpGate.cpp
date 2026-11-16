@@ -25,115 +25,16 @@ bool RtkJumpGate::accept(double cx, double cy, double yawRad, qint64 recvMs,
                          double baseX, double baseY, double baseYawRad,
                          bool hasOdom, double omyawRad)
 {
-    const double dx = cx - baseX;
-    const double dy = cy - baseY;
-    const double dist = std::sqrt(dx * dx + dy * dy);
-    const double dRtkDeg = DogProtocol::radStd(yawRad - baseYawRad) * kRadToDeg;
-    const double dyawDeg = std::fabs(dRtkDeg);
-
-    if (dist > _cfg.rtkMaxJumpM)
-    {
-        // 纯位置跳变：只按野值丢弃，不参与重启判定
-        _yawJumpRun = 0;
-        _jumpSinceMs = 0;
-        _rejectYawValid = false;
-        ++_badJumps;
-        qWarning().noquote() << QStringLiteral("[Rtk] 位置跳变丢弃 Δ=%1m Δyaw=%2° 累计%3帧")
-            .arg(dist, 0, 'f', 2).arg(dyawDeg, 0, 'f', 1).arg(_badJumps);
-        return false;
-    }
-
-    if (dyawDeg > _cfg.rtkMaxJumpDeg)
-    {
-        const qint64 kRestartHoldMs = 600;
-        const double dOdomDeg = (hasOdom && _odomYawValid)
-                                    ? DogProtocol::radStd(omyawRad - _odomYawRad) * kRadToDeg
-                                    : 0.0;
-        const bool odomTurned = (std::fabs(dOdomDeg) >= 5.0);
-        const bool sameSense = (dRtkDeg * dOdomDeg > 0.0);
-        const bool sameAmount = (std::fabs(dyawDeg - std::fabs(dOdomDeg)) <= 60.0);
-
-        if (odomTurned && sameSense && sameAmount)
-        {
-            // A：真转向。接受本帧，绝不清零位——清零位等于把"地图东"搬到当前机头方向，
-            //    每清一次就丢一个等于当时转角的航向偏置。
-            _yawJumpRun = 0;
-            _jumpSinceMs = 0;
-            _rejectYawValid = false;
-            qInfo().noquote() << QStringLiteral(
-                "[Rtk] 航向台阶跟随里程计（差分 %1° / 里程计 %2°），按真转向接受")
-                .arg(dRtkDeg, 0, 'f', 1).arg(dOdomDeg, 0, 'f', 1);
-        }
-        else if (!odomTurned)
-        {
-            // B：狗没转、只有差分航向跳。同一角度簇稳住够久才算模块重启。
-            const bool sameCluster =
-                _rejectYawValid
-                && std::fabs(DogProtocol::radStd(yawRad - _rejectYawRad)) * kRadToDeg < 5.0;
-            if (!sameCluster || _jumpSinceMs == 0)
-                _jumpSinceMs = recvMs;
-            _rejectYawRad = yawRad;
-            _rejectYawValid = true;
-            ++_yawJumpRun;
-            const qint64 heldMs = recvMs - _jumpSinceMs;
-            if (heldMs >= kRestartHoldMs)
-            {
-                _yawJumpRun = 0;
-                _jumpSinceMs = 0;
-                _rejectYawValid = false;
-                ++_restarts;
-                // 现场教训：链路断流一次就把差分航向顶 40~70°，恢复后被判"模块重启"，
-                // 于是每断一次就重取一次零位——航向基准被反复改写，旋转任务"到位"
-                // 其实是把当时的错朝向当成 0°。所以重取必须有上限。
-                if (_cfg.rtkZeroRebaseMax >= 0 && _restarts > _cfg.rtkZeroRebaseMax)
-                {
-                    if (!_rebaseExhausted)
-                    {
-                        _rebaseExhausted = true;
-                        qWarning().noquote() << QStringLiteral(
-                            "[Rtk] 航向零位重取已达上限 %1 次（累计判定 %2 次）：此后差分航向跳变"
-                            "一律丢弃，航向基准不再改写。若仍不稳，请置 Rtk/YawFromRtk=0 只用里程计航向")
-                            .arg(_cfg.rtkZeroRebaseMax).arg(_restarts);
-                    }
-                    ++_badJumps;
-                    return false;
-                }
-                qWarning().noquote() << QStringLiteral(
-                    "[Rtk] 狗未转动时差分航向偏移 %1° 并稳定 %2ms（累计判定 %3 次）→ "
-                    "判为差分模块重启，接受本帧并按当前地图朝向重取零位")
-                    .arg(dyawDeg, 0, 'f', 1).arg(heldMs).arg(_restarts);
-                _fusion.requestYawZero(QStringLiteral("差分模块重启"), omyawRad);
-            }
-            else
-            {
-                ++_badJumps;
-                qWarning().noquote() << QStringLiteral(
-                    "[Rtk] 单帧航向跳变丢弃 Δyaw=%1°（里程计同期 %2°，累计%3帧）")
-                    .arg(dyawDeg, 0, 'f', 1).arg(dOdomDeg, 0, 'f', 1).arg(_badJumps);
-                return false;
-            }
-        }
-        else
-        {
-            // C：狗转了，但差分航向跟错方向或跟丢
-            _yawJumpRun = 0;
-            _jumpSinceMs = 0;
-            _rejectYawValid = false;
-            ++_badJumps;
-            qWarning().noquote() << QStringLiteral(
-                "[Rtk] 航向与里程计不符（差分 %1° / 里程计 %2°），丢弃该帧："
-                "先核对航向符号与轴向（东0°/南90°/西180°/北270°）")
-                .arg(dRtkDeg, 0, 'f', 1).arg(dOdomDeg, 0, 'f', 1);
-            return false;
-        }
-    }
-    else
-    {
-        _yawJumpRun = 0;
-        _jumpSinceMs = 0;
-        _rejectYawValid = false;
-    }
-
+    // 现场口径（2026-11-16）：差分坐标/标定后角度均为绝对真值，只会上报慢，
+    // 不会跳变（极少数狗停着时的格点小跳也照收，它就是真值）。
+    // 本门因此不再丢弃任何位置/航向帧；"断流停车"由 MainController::updateRtkGuard
+    // 按"超过 GuardStaleMs 没新帧"判定，恢复后原地钉一次再继续。
+    (void)cx; (void)cy; (void)yawRad; (void)recvMs;
+    (void)baseX; (void)baseY; (void)baseYawRad;
+    (void)hasOdom; (void)omyawRad;
+    _yawJumpRun = 0;
+    _jumpSinceMs = 0;
+    _rejectYawValid = false;
     return true;
 }
 

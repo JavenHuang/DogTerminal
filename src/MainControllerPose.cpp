@@ -246,6 +246,32 @@ void MainController::resetMapReference(double localX, double localY, double loca
     _map.resetReference(localX, localY, localYaw);
     // 尺度是硬件特性，重建参考后仍然有效
     _map.setScale(_yaw->calibScale());
+
+    // mapreset 标定：把当前差分 yaw 读数记为零位——之后差分报的角度都减这个零位，
+    // 等于"mapreset 那一刻的差分朝向 = 地图 0°"。开机标定一次，运行期不再改。
+    double rx = 0.0, ry = 0.0, ryaw = 0.0;
+    qint64 rms = 0;
+    if (_rtk && _rtk->lastFix(&rx, &ry, &rms, &ryaw))
+    {
+        _rtkYawZero = ryaw;
+        // 地图原点 = 当前差分绝对坐标：之后 toMap/toLocal 换算都以差分为绝对基准
+        MapTransform::Params p = _map.params();
+        p.originX = rx;
+        p.originY = ry;
+        _map.setParams(p);
+        qWarning().noquote() << QStringLiteral(
+            "[Map] 差分标定完成：原点=(%1, %2) · 航向零位=%3°"
+            "（地图坐标=差分绝对坐标，之后差分报多少地图就是多少）")
+               .arg(rx, 0, 'f', 2).arg(ry, 0, 'f', 2)
+               .arg(ryaw * 180.0 / M_PI, 0, 'f', 1);
+    }
+    else
+    {
+        _rtkYawZero = 0.0;
+        qWarning().noquote() << QStringLiteral(
+            "[Map] 建参考时差分帧未就绪，原点/航向零位暂记 0；下一帧差分来后自动补标定");
+    }
+
     // 融合偏移与重启判据基准都绑在旧参考点上，交给跟踪器统一作废（尺度/转角继续沿用）
     _rtk->onMapRefReset();
     // 参考朝向变了 → 地图系被整体旋转，差分系到地图系的转角估计与相对基准同时作废
@@ -254,6 +280,11 @@ void MainController::resetMapReference(double localX, double localY, double loca
     _rkRotRad = 0.0;
     _rkRotApplied = 0;
     _rkAnchorN = 0;
+    // 差分跟随也要重新认基准：旧基准的平移是旧原点下的，继续用会把位姿拽偏
+    _rkFollowValid = false;
+    _rkFollowX = 0.0;
+    _rkFollowY = 0.0;
+    _rkFollowLogMs = 0;
     // 地图 0° 就是"此刻狗的朝向"，所以差分零位必须锚在同一姿态上：
     // 融合模块自己等静止窗口取 b，取到之前不建立偏移，避免随机零位污染航向基准。
     if (_cfg.rtkEnabled)
@@ -323,7 +354,7 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
     // 两者之比直接给出真实 k：k_true = k_cur × lenR / lenM。
     // 只管打印、不自动改 map：尺度会改变整张地图的坐标，现场跑任务时静默改
     // 会让正在执行的目标点在脚下移动；有偏差时用 mapline 重标一次更可控。
-    if (lenR >= 3.0 && lenM >= 2.0)
+    if (!_cfg.rtkYawFollow && lenR >= 3.0 && lenM >= 2.0)
     {
         const double kTrue = _map.scale() * (lenR / lenM);
         const double devPct = (kTrue / _map.scale() - 1.0) * 100.0;
@@ -344,11 +375,10 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
     }
 
     // ---- 方向校准：估计 δ = 地图位移方向 − 差分位移方向，够一致就闭环进 refYaw ----
-    // 两段位移都要够长，否则方位噪声被放大；δ 上限 60°（超过 60° 说明 mapreset 时
-    // 狗横得太歪，闭环会把整张地图转飞，宁可重来）。只接受"连续两段互差 ≤12°"的估计，
-    // 避免把绕圈/弧线走成的一次方向跳当真。
+    // 现场口径（2026-11-16）：差分标定后角度即绝对真值，运行期不再闭环改 refYaw——
+    // 那等于运行期重标定角度。rtkYawFollow 开启时此段整体关闭，绝对朝向由每帧钉入。
     const double boot = _cfg.rtkAnchorBootMoveM;
-    if (_rkRotApplied < 2 && lenR >= boot && lenM >= boot)
+    if (!_cfg.rtkYawFollow && _rkRotApplied < 2 && lenR >= boot && lenM >= boot)
     {
         const double delta = DogProtocol::radStd(std::atan2(dmy, dmx) - std::atan2(dry, drx));
         const double kConsist = 12.0 * M_PI / 180.0;
@@ -493,6 +523,250 @@ void MainController::applyRtkAnchor(double ax, double ay, double mapX, double ma
     // 一次常值偏置（可重复、可接受），漂移抑制效果完全一样。
 }
 
+// ============================================================
+// 差分位置跟随（[Rtk] PosFollow=true）
+//
+// 与静置锚点的区别：锚点只在"停稳 1.2s + 攒满 12 帧"后给一次点（一次行走
+// 往往只有一两站）；跟随则在**每一个差分数值更新**时都对一次位置，位姿全程
+// 被差分约束，里程计只在格点内推进。两者共用同一套基准/转角换算，不打架。
+//
+// 三条现场约束写进实现：
+//   1) 差分值没变（同格冻结）→ 不跟随。若每帧都钉，格点内的里程计推进会被
+//      一遍遍抹掉，位姿停着不动直到跨格（实测冻结最长 17.6s），导航必崩。
+//   2) 修正量 >3m 不采纳（差分跳格/基准错位），基准重置到当前，只告警。
+//   3) 跟随推进 _anchorSeq：到点复核据此判"差分结算过"，不必再等停稳锚点。
+// ============================================================
+// ============================================================
+// 把位姿钉到差分推算位置：基准（平移）+ 转角（_rkRotRad）一次换算
+// 返回 true 表示位姿真的被修正了（_st/_dr 已同步）
+// ============================================================
+bool MainController::applyRtkFollowTo(double ax, double ay)
+{
+    double mx = 0.0;
+    double my = 0.0;
+    _map.toMap(_st.x, _st.y, _st.yaw, &mx, &my, nullptr);
+
+    if (!_rkBaseValid)
+    {
+        _rkBaseValid = true;
+        _rkBaseRtkX = ax;
+        _rkBaseRtkY = ay;
+        // 地图坐标 = 差分绝对坐标（不再是相对 (0,0)）：之后 tx = ax, ty = ay
+        _rkBaseMapX = ax;
+        _rkBaseMapY = ay;
+        // mapreset 时差分帧未就绪的情况：补设地图原点
+        MapTransform::Params p = _map.params();
+        if (std::fabs(p.originX) < 1e-6 && std::fabs(p.originY) < 1e-6)
+        {
+            p.originX = ax;
+            p.originY = ay;
+            _map.setParams(p);
+        }
+        _rkFollowValid = true;
+        _rkFollowX = ax;
+        _rkFollowY = ay;
+        qWarning().noquote()
+            << QStringLiteral("[Anchor] 差分跟随基准：差分(%1, %2) ↔ 地图(%3, %4)"
+                              "——地图坐标=差分绝对坐标，之后差分每跳一格就把位姿钉回它")
+                   .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2)
+                   .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2);
+        return false;
+    }
+
+    const double drx = ax - _rkBaseRtkX;
+    const double dry = ay - _rkBaseRtkY;
+    const double c = std::cos(_rkRotRad);
+    const double s = std::sin(_rkRotRad);
+    const double tx = _rkBaseMapX + (c * drx - s * dry);
+    const double ty = _rkBaseMapY + (s * drx + c * dry);
+    const double ex = tx - mx;
+    const double ey = ty - my;
+    const double err = std::sqrt(ex * ex + ey * ey);
+
+    if (err > 3.0)
+    {
+        qWarning().noquote()
+            << QStringLiteral("[Anchor] 差分跟随修正量 %1m 异常，本次不采纳（疑似跳格/基准错位）；"
+                              "基准重置到当前：差分(%2, %3) ↔ 地图(%4, %5)")
+                   .arg(err, 0, 'f', 2)
+                   .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2)
+                   .arg(mx, 0, 'f', 2).arg(my, 0, 'f', 2);
+        _rkBaseRtkX = ax;
+        _rkBaseRtkY = ay;
+        _rkBaseMapX = mx;
+        _rkBaseMapY = my;
+        _rkFollowValid = true;
+        _rkFollowX = ax;
+        _rkFollowY = ay;
+        return false;
+    }
+
+    // 格点量化本身就有 0.1~0.3m 的台阶：小于 0.03m 视为"同格重复"，不折腾位姿
+    if (err < 0.03)
+    {
+        _rkFollowValid = true;
+        _rkFollowX = ax;
+        _rkFollowY = ay;
+        return false;
+    }
+
+    double lx = 0.0;
+    double ly = 0.0;
+    _map.toLocal(tx, ty, 0.0, &lx, &ly, nullptr);
+    _dr.reset(lx, ly);          // 下一个状态包起，_st 就从这里继续积分
+    _st.x = lx;                 // 控制节拍读的是 _st，当场同步，不等下一包
+    _st.y = ly;
+    ++_anchorSeq;               // 真发生了一次差分修正 → 到点复核可据此结算
+    _rkFollowValid = true;
+    _rkFollowX = ax;
+    _rkFollowY = ay;
+
+    const qint64 tNow = nowMs();
+    if (_rkFollowLogMs == 0 || tNow - _rkFollowLogMs >= 1000)
+    {
+        _rkFollowLogMs = tNow;
+        qInfo().noquote()
+            << QStringLiteral("[Anchor] 差分跟随 %1m：地图(%2, %3) → (%4, %5)"
+                              "（差分(%6, %7) · 第%8次结算）")
+                   .arg(err, 0, 'f', 2)
+                   .arg(mx, 0, 'f', 2).arg(my, 0, 'f', 2)
+                   .arg(tx, 0, 'f', 2).arg(ty, 0, 'f', 2)
+                   .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2)
+                   .arg(_anchorSeq);
+    }
+    return true;
+}
+
+void MainController::syncRtkFollow()
+{
+    if (!_cfg.rtkEnabled || !_rtk || !_st.valid)
+        return;
+    if (!_map.isActive())
+        return;
+
+    double ax = 0.0;
+    double ay = 0.0;
+    double ayaw = 0.0;
+    qint64 fixMs = 0;
+    if (!_rtk->lastFix(&ax, &ay, &fixMs, &ayaw))
+        return;
+
+    // 差分航向 = 绝对真值：每个差分帧都把局部 yaw 钉到差分地图角，
+    // 与位置是否跨格、是否开启 PosFollow 无关（同格冻结时角度仍照常钉）。
+    // 帧间由陀螺积分桥接。mapreset 时当前差分 yaw 已记为零位，这里先减零位再换算。
+    if (_cfg.rtkYawFollow && _map.hasReference())
+    {
+        const double mapYaw = DogProtocol::radStd(ayaw - _rtkYawZero);
+        const double localYaw = _map.mapYawToLocalYaw(mapYaw);
+        _yaw->forceReference(localYaw);
+        _st.yaw = localYaw;
+    }
+
+    // 位置跟随：仅在 PosFollow 且位姿走 dr 时生效（角度路径已在上面独立完成）
+    if (!_cfg.rtkPosFollow || !_cfg.posePosSourceDr)
+        return;
+
+    const qint64 nowFix = fixMs > 0 ? fixMs : nowMs();
+
+    // 同格冻结：差分值没动就不碰位姿，交给 DrPose 推进
+    if (_rkGuardSeen
+        && std::fabs(ax - _rkGuardLastX) < 1e-6 && std::fabs(ay - _rkGuardLastY) < 1e-6)
+        return;
+
+    const double stepM = _rkGuardSeen
+        ? std::sqrt((ax - _rkGuardLastX) * (ax - _rkGuardLastX)
+                    + (ay - _rkGuardLastY) * (ay - _rkGuardLastY))
+        : 0.0;
+    const double dtChg = (_rkGuardSeen && _rkGuardLastChangeMs > 0 && nowFix > _rkGuardLastChangeMs)
+        ? static_cast<double>(nowFix - _rkGuardLastChangeMs) / 1000.0
+        : 0.26;   // 未记录时刻时按实测差分周期 262ms 估
+    // 物理允许步长：狗最快 2.0m/s，差分周期 262ms → 单帧真实位移 ≤0.53m；
+    // 一格 0.61×0.42m。所以"一步超过 0.8m（或 2m/s 在断流期间该走的距离）"只能是
+    // 跳格/模块重启：此时把位姿钉过去等于把狗瞬移，改为停车等它稳定。
+    const double allowM = qMax(_cfg.rtkGuardJumpM, 2.0 * dtChg);
+
+    _rkGuardSeen = true;
+    _rkGuardLastX = ax;
+    _rkGuardLastY = ay;
+    _rkGuardLastChangeMs = nowFix;
+
+    // 现场口径：差分不会跳变，只会上报慢。单帧步长大于"物理允许"是延迟上报
+    // 积累的真实位移，不是跳格——直接跟随，不停车。只保留断流停车（updateRtkGuard）。
+    applyRtkFollowTo(ax, ay);
+}
+
+// ============================================================
+// 差分异常守门（20Hz 控制节拍调用）
+//
+// 两条判据，命中就停车（NavBridge 收到 _rtkHold 后只发零速、不推进导航）：
+//   1) 断流：超过 GuardStaleMs 没有新差分帧 → 位姿只能靠里程计外推，
+//      现场实测断流 1.5~3.0s 出现过 8 次，这期间走多远就错多远；
+//   2) 坐标跳动：差分单帧跳超过"物理允许步长"（见 syncRtkFollow）。
+// 恢复：差分帧新鲜且数值连续 N 拍不再变（落在同一格）→ 若位姿还落后于差分，
+// 先在原地一次性钉到差分（此时狗是停的，不会把修正量走成实位移），再继续任务。
+// ============================================================
+void MainController::updateRtkGuard()
+{
+    if (!_cfg.rtkGuardStop || !_cfg.rtkEnabled || !_cfg.posePosSourceDr || !_rtk)
+        return;
+    if (!_cfg.rtkPosFollow)
+        return;
+
+    double ax = 0.0;
+    double ay = 0.0;
+    qint64 fixMs = 0;
+    const qint64 now = nowMs();
+    if (!_rtk->lastFix(&ax, &ay, &fixMs))
+        return;
+
+    // 断流：差分长时间没上报
+    const bool stale = (now - fixMs) > static_cast<qint64>(_cfg.rtkGuardStaleMs);
+    if (stale)
+    {
+        _rkGuardGoodN = 0;
+        if (!_rtkHold && _navigator && _navigator->isActive())
+        {
+            _rtkHold = true;
+            _rtkHoldWhy = QStringLiteral("差分断流 %1ms").arg(now - fixMs);
+            qWarning().noquote()
+                << QStringLiteral("[Rtk] 差分断流 %1ms（阈值 %2ms）→ 先停车等数据，"
+                                  "恢复后自动继续当前任务")
+                       .arg(now - fixMs).arg(_cfg.rtkGuardStaleMs);
+            _rkHoldLogMs = now;
+        }
+        return;
+    }
+
+    if (!_rtkHold)
+        return;
+
+    // 恢复判据：差分值连续 N 拍不变（稳定落在同一格）且帧新鲜
+    const bool valueStable = std::fabs(ax - _rkGuardLastX) < 1e-6
+                             && std::fabs(ay - _rkGuardLastY) < 1e-6;
+    if (!valueStable)
+    {
+        _rkGuardGoodN = 0;
+        return;
+    }
+    if (++_rkGuardGoodN < _cfg.rtkGuardRecoverFrames)
+        return;
+
+    // 位姿还落后于差分（跳格那次没钉）：趁机在原地一次性落地
+    const bool lagging = !_rkFollowValid
+                         || std::fabs(ax - _rkFollowX) > 1e-6
+                         || std::fabs(ay - _rkFollowY) > 1e-6;
+    if (lagging)
+        applyRtkFollowTo(ax, ay);
+
+    _rtkHold = false;
+    _rkGuardGoodN = 0;
+    qWarning().noquote()
+        << QStringLiteral("[Rtk] 差分已恢复（连续 %1 帧稳定，差分(%2, %3)）→ 继续执行当前任务")
+               .arg(_cfg.rtkGuardRecoverFrames)
+               .arg(ax, 0, 'f', 2).arg(ay, 0, 'f', 2);
+    _rkHoldLogMs = now;
+}
+
 void MainController::beginLineTrace()
 {
     const DogOdom &odom = _dog->odom();
@@ -505,6 +779,7 @@ void MainController::beginLineTrace()
     _traceAccX     = 0.0;
     _traceAccY     = 0.0;
     _traceLastMs   = 0;
+    _traceLastChangeMs = 0;
     _traceJumpN    = 0;
     _traceJumpM    = 0.0;
     _tracePkts     = 0;
@@ -519,11 +794,12 @@ void MainController::beginLineTrace()
 
 void MainController::traceTick(const DogOdom &odom)
 {
-    // 单帧步长按"包间隔 × 实测速度"自适应判定，而不是固定米数：
-    // 狗端状态包实际约 110Hz（日志里 dt 是 8~11ms），但 mapreset 期间真狗单帧
-    // 位移本来只有几十毫米，而狗端 odom 整体跳变一次就是 0.6~3m。
-    // run9 实测：固定 1.5m 门限会把 0.74m / 1.57m 的跳变当成正常步长累加，
-    // 于是 k 被算成 1.445 直接判超限。改用 3×vBody×dt + 0.10m（下限 0.10m）。
+    // 单帧步长按"自上次位置变化以来的间隔 × 实测速度"判定，而不是包间隔：
+    // 狗端 odom.position 是**成块刷新**的（2026-11-16 实测：同一值重复若干包，
+    // 真正变化那一帧一步 0.12~0.45m，约 1s 一次），包间隔却只有 8~11ms。
+    // 按包间隔算 allow≈0.11m，于是把真实位移判成跳变整帧丢掉：
+    // 行程显示 0.43m，而差分位移 1.22m、原始 odom 1.14m，被丢的正是真走的 0.71m。
+    // 判据改成"物理上不可能才丢"：静止挪一步、或走动中一跳超出 maxGap×速度。
     const double sdx = odom.position[0] - _traceLastX;
     const double sdy = odom.position[1] - _traceLastY;
     const double step = std::sqrt(sdx * sdx + sdy * sdy);
@@ -533,15 +809,26 @@ void MainController::traceTick(const DogOdom &odom)
                        ? static_cast<double>(tNow - _traceLastMs) / 1000.0 : 0.0;
     _traceLastMs = tNow;
 
+    const bool changed = (sdx != 0.0 || sdy != 0.0);
+    const qint64 sinceChangeMs = (changed && _traceLastChangeMs > 0)
+                               ? (tNow - _traceLastChangeMs) : 0;
+    if (changed)
+        _traceLastChangeMs = tNow;
+    double dtEf = static_cast<double>(sinceChangeMs) / 1000.0;
+    if (dtEf < dtPkt)
+        dtEf = dtPkt;
+    if (dtEf > 2.0)
+        dtEf = 2.0;
+
     const double vBody = std::sqrt(static_cast<double>(odom.vBody[0]) * odom.vBody[0]
                                    + static_cast<double>(odom.vBody[1]) * odom.vBody[1]);
-    double allow = 3.0 * vBody * (dtPkt > 0.0 ? dtPkt : 0.05) + 0.10;
+    double allow = 3.0 * vBody * (dtEf > 0.0 ? dtEf : 0.05) + 0.10;
     if (allow < 0.10)
         allow = 0.10;
 
     if (step > allow)
     {
-        // 跳变帧：整帧丢弃，既不计路径也不计位移
+        // 物理上不可能的单帧步长：整帧丢弃，只计数（真位移已由 dtEf 放过）
         ++_traceJumpN;
         _traceJumpM += step;
     }

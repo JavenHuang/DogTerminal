@@ -27,10 +27,12 @@
 NavBridge::NavBridge(const TerminalConfig &cfg, Navigator &navigator, RtkPoseTracker &rtk,
                      DogClientBase *&dog, MotionState &st, ReportService &report,
                      QTimer *acquireTimer, QTimer *velocityTimer,
-                     bool &running, bool &controlAcquired, bool &velCtrlActive)
+                     bool &running, bool &controlAcquired, bool &velCtrlActive,
+                     bool &rtkHold)
     : _cfg(cfg), _navigator(navigator), _rtk(rtk), _dog(dog), _st(st), _report(report),
       _acquireTimer(acquireTimer), _velocityTimer(velocityTimer),
-      _running(running), _controlAcquired(controlAcquired), _velCtrlActive(velCtrlActive)
+      _running(running), _controlAcquired(controlAcquired), _velCtrlActive(velCtrlActive),
+      _rtkHold(rtkHold)
 {
 }
 
@@ -104,6 +106,17 @@ void NavBridge::remote(double forwardJoy, double turnJoy)
     if (_velCtrlActive)
     {
         qWarning() << "[Nav] 速度直控模式激活中，导航输出被忽略";
+        return;
+    }
+
+    // 差分异常（坐标跳动 / 长时间未上报）：先停车，等数据恢复再继续走。
+    // 这里零速而不是"停了但姿势还在走"：现场实测差分会在相邻格点间来回跳
+    // （同一段行走 x 反复落在 0.40/1.02/1.63/2.24/2.85），单帧还出现 2~3.2m 整段跳，
+    // 断流 1.5~3.0s 出现过 8 次。此时导航算出来的转向量是拿错位姿算的，
+    // 继续走等于把位姿误差走成实位移；停下不动最多原地多等 1~2s。
+    if (_rtkHold)
+    {
+        _dog->sendZeroRemote();
         return;
     }
 
