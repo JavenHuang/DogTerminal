@@ -244,8 +244,8 @@ void MainController::onDogStateData()
 void MainController::resetMapReference(double localX, double localY, double localYaw)
 {
     _map.resetReference(localX, localY, localYaw);
-    // 尺度是硬件特性，重建参考后仍然有效
-    _map.setScale(_yaw->calibScale());
+    // 尺度固定 1.0：差分每帧直接钉位置，不再用旧直线标定系数
+    _map.setScale(1.0);
 
     // mapreset 标定：把当前差分 yaw 读数记为零位——之后差分报的角度都减这个零位，
     // 等于"mapreset 那一刻的差分朝向 = 地图 0°"。开机标定一次，运行期不再改。

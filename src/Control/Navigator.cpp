@@ -80,9 +80,9 @@ void Navigator::start(quint32 taskId, double localX, double localY,
     _taskId = taskId;
     _targetX = localX;
     _targetY = localY;
-    // 现场口径：固定 2 m/s 巡航、1m 到达半径，不受服务器下发值覆盖
+    // 速度/到达半径以终端配置为准，服务端下发的小值不覆盖
     _maxSpeed = _params.maxLinearSpeed;
-    _arriveRadius = 1.0;
+    _arriveRadius = _params.arriveRadiusDefault;
     _timeoutMs = timeoutMs;
     _startMs = QDateTime::currentMSecsSinceEpoch();
     _remainingDist = 0;
